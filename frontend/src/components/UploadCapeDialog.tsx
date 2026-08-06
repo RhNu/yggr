@@ -1,23 +1,22 @@
 import { useEffect, useState } from "react";
 
-import { uploadTexture, textureUrl, type Player } from "@/api";
+import { textureUrl, type Player } from "@/api";
 import SkinPreview from "@/components/SkinPreview";
 import Button from "@/components/ui/Button";
 import Dialog from "@/components/ui/Dialog";
 import Input from "@/components/ui/Input";
-import { useAsyncAction } from "@/hooks/useAsyncAction";
+import { useUploadTexture } from "@/queries";
 
 interface Props {
   open: boolean;
   player: Player;
   onClose: () => void;
-  onChanged: () => void;
 }
 
-export default function UploadCapeDialog({ open, player, onClose, onChanged }: Props) {
+export default function UploadCapeDialog({ open, player, onClose }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const { busy, error, run } = useAsyncAction();
+  const uploadTexture = useUploadTexture();
 
   useEffect(() => {
     if (open) {
@@ -42,13 +41,12 @@ export default function UploadCapeDialog({ open, player, onClose, onChanged }: P
     e.target.value = "";
   };
 
-  const handleConfirm = async () => {
+  const handleConfirm = () => {
     if (!file) return;
-    const result = await run(() => uploadTexture(player.id, "cape", file));
-    if (result !== null) {
-      onClose();
-      onChanged();
-    }
+    uploadTexture.mutate(
+      { playerId: player.id, type: "cape", file },
+      { onSuccess: () => onClose() },
+    );
   };
 
   const currentSkinUrl = player.skin_hash
@@ -63,11 +61,16 @@ export default function UploadCapeDialog({ open, player, onClose, onChanged }: P
       onClose={onClose}
       footer={
         <>
-          <Button variant="secondary" size="sm" onClick={onClose} disabled={busy}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onClose}
+            disabled={uploadTexture.isPending}
+          >
             Cancel
           </Button>
-          <Button size="sm" onClick={handleConfirm} disabled={busy || !file}>
-            {busy ? "..." : "Confirm Upload"}
+          <Button size="sm" onClick={handleConfirm} disabled={uploadTexture.isPending || !file}>
+            {uploadTexture.isPending ? "..." : "Confirm Upload"}
           </Button>
         </>
       }
@@ -93,7 +96,7 @@ export default function UploadCapeDialog({ open, player, onClose, onChanged }: P
 
       <Input label="Cape File" type="file" accept="image/png" onChange={handleFileSelect} />
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {uploadTexture.error && <p className="text-sm text-red-400">{uploadTexture.error.message}</p>}
     </Dialog>
   );
 }

@@ -34,11 +34,3 @@ export const useAuthStore = create<AuthState>()(
     },
   ),
 );
-
-export function getToken(): string | null {
-  return useAuthStore.getState().token;
-}
-
-export function getClientToken(): string | null {
-  return useAuthStore.getState().clientToken;
-}

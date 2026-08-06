@@ -1,25 +1,24 @@
-import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import CreatePlayerDialog from "@/components/CreatePlayerDialog";
 import PlayerCard from "@/components/PlayerCard";
 import Button from "@/components/ui/Button";
+import { useMe } from "@/queries";
 import { useAuthStore } from "@/store/authStore";
-import { usePlayerStore } from "@/store/playerStore";
 
 export default function Dashboard() {
-  const { me, error, loading, refresh } = usePlayerStore();
+  const { data: me, isLoading, error } = useMe();
   const logout = useAuthStore((s) => s.logout);
+  const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
   const handleLogout = () => {
+    queryClient.clear();
     logout();
   };
 
-  if (loading && !me) {
+  if (isLoading && !me) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8">
         <p className="text-center text-neutral-500">Loading...</p>
@@ -39,7 +38,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
+      {error && <p className="mb-4 text-sm text-red-400">{error.message}</p>}
 
       <div className="mb-6">
         <Button size="sm" onClick={() => setShowCreate(true)}>
@@ -50,7 +49,7 @@ export default function Dashboard() {
       {me && me.players.length > 0 ? (
         <div className="grid [grid-template-columns:repeat(auto-fill,minmax(360px,1fr))] gap-4">
           {me.players.map((p) => (
-            <PlayerCard key={p.id} player={p} onChanged={refresh} />
+            <PlayerCard key={p.id} player={p} />
           ))}
         </div>
       ) : (
@@ -61,11 +60,7 @@ export default function Dashboard() {
         )
       )}
 
-      <CreatePlayerDialog
-        open={showCreate}
-        onClose={() => setShowCreate(false)}
-        onCreated={refresh}
-      />
+      <CreatePlayerDialog open={showCreate} onClose={() => setShowCreate(false)} />
     </div>
   );
 }

@@ -1,42 +1,44 @@
 import { useState } from "react";
 
 import type { Player } from "@/api";
-import { deletePlayer, deleteTexture, textureUrl, updateSkinModel } from "@/api";
+import { textureUrl } from "@/api";
 import SkinPreview from "@/components/SkinPreview";
 import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Select from "@/components/ui/Select";
 import UploadCapeDialog from "@/components/UploadCapeDialog";
 import UploadSkinDialog from "@/components/UploadSkinDialog";
-import { useAsyncAction } from "@/hooks/useAsyncAction";
+import { useDeletePlayer, useDeleteTexture, useUpdateSkinModel } from "@/queries";
 
 interface Props {
   player: Player;
-  onChanged: () => void;
 }
 
-export default function PlayerCard({ player, onChanged }: Props) {
+export default function PlayerCard({ player }: Props) {
   const [showUploadSkin, setShowUploadSkin] = useState(false);
   const [showUploadCape, setShowUploadCape] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
-  const { busy, error, run } = useAsyncAction();
 
-  const handleModelChange = async (model: string) => {
-    const ok = await run(() => updateSkinModel(player.id, model));
-    if (ok !== null) onChanged();
+  const updateSkinModel = useUpdateSkinModel();
+  const deleteTextureMutation = useDeleteTexture();
+  const deletePlayerMutation = useDeletePlayer();
+
+  const busy =
+    updateSkinModel.isPending || deleteTextureMutation.isPending || deletePlayerMutation.isPending;
+  const error = updateSkinModel.error || deleteTextureMutation.error || deletePlayerMutation.error;
+
+  const handleModelChange = (model: string) => {
+    updateSkinModel.mutate({ id: player.id, model });
   };
 
-  const handleDeleteTexture = async (type: "skin" | "cape") => {
-    const ok = await run(() => deleteTexture(player.id, type));
-    if (ok !== null) onChanged();
+  const handleDeleteTexture = (type: "skin" | "cape") => {
+    deleteTextureMutation.mutate({ playerId: player.id, type });
   };
 
-  const handleDeletePlayer = async () => {
-    const ok = await run(() => deletePlayer(player.id));
-    if (ok !== null) {
-      setShowDelete(false);
-      onChanged();
-    }
+  const handleDeletePlayer = () => {
+    deletePlayerMutation.mutate(player.id, {
+      onSuccess: () => setShowDelete(false),
+    });
   };
 
   const skinUrl = player.skin_hash
@@ -59,7 +61,7 @@ export default function PlayerCard({ player, onChanged }: Props) {
         skinModel={player.skin_model as "classic" | "slim"}
       />
 
-      {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
+      {error && <p className="mb-3 text-sm text-red-400">{error.message}</p>}
 
       <div className="mb-3 flex items-center gap-2">
         <span className="text-xs text-neutral-500">Model:</span>
@@ -120,14 +122,12 @@ export default function PlayerCard({ player, onChanged }: Props) {
         open={showUploadSkin}
         player={player}
         onClose={() => setShowUploadSkin(false)}
-        onChanged={onChanged}
       />
 
       <UploadCapeDialog
         open={showUploadCape}
         player={player}
         onClose={() => setShowUploadCape(false)}
-        onChanged={onChanged}
       />
 
       <ConfirmDialog

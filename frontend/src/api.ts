@@ -1,8 +1,12 @@
 import { createLogger } from "@/logger";
-import { getToken } from "@/store/authStore";
+import { useAuthStore } from "@/store/authStore";
 
 const log = createLogger("api");
 const API_BASE = "";
+
+function getToken(): string | null {
+  return useAuthStore.getState().token;
+}
 
 async function request(path: string, options: RequestInit = {}) {
   const token = getToken();
@@ -26,7 +30,10 @@ async function request(path: string, options: RequestInit = {}) {
     } catch {
       if (text) msg = text;
     }
-    if (resp.status >= 500) {
+    if (resp.status === 401) {
+      log.warn("session expired", { path });
+      useAuthStore.getState().logout();
+    } else if (resp.status >= 500) {
       log.error("server error", { path, status: resp.status, message: msg });
     } else {
       log.warn("client error", { path, status: resp.status, message: msg });

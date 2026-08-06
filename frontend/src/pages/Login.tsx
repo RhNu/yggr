@@ -1,34 +1,26 @@
 import { useState } from "react";
 
-import { login } from "@/api";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import { createLogger } from "@/logger";
+import { useLogin } from "@/queries";
 import { useAuthStore } from "@/store/authStore";
-
-const log = createLogger("Login");
 
 export default function Login() {
   const setAuth = useAuthStore((s) => s.setAuth);
+  const loginMutation = useLogin();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const { access_token, client_token } = await login(username, password);
-      setAuth(access_token, client_token);
-      log.info("login successful", { username });
-    } catch (err) {
-      log.warn("login failed", { username, error: err });
-      setError(err instanceof Error ? err.message : "Login failed");
-    } finally {
-      setLoading(false);
-    }
+    loginMutation.mutate(
+      { username, password },
+      {
+        onSuccess: (data) => {
+          setAuth(data.access_token, data.client_token);
+        },
+      },
+    );
   };
 
   return (
@@ -51,9 +43,11 @@ export default function Login() {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading ? "..." : "Login"}
+          {loginMutation.error && (
+            <p className="mb-4 text-sm text-red-400">{loginMutation.error.message}</p>
+          )}
+          <Button type="submit" disabled={loginMutation.isPending} className="w-full">
+            {loginMutation.isPending ? "..." : "Login"}
           </Button>
         </form>
       </div>

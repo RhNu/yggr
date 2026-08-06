@@ -1,22 +1,20 @@
 import { useEffect, useState } from "react";
 
-import { createPlayer } from "@/api";
 import Button from "@/components/ui/Button";
 import Dialog from "@/components/ui/Dialog";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import { useAsyncAction } from "@/hooks/useAsyncAction";
+import { useCreatePlayer } from "@/queries";
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  onCreated: () => void;
 }
 
-export default function CreatePlayerDialog({ open, onClose, onCreated }: Props) {
+export default function CreatePlayerDialog({ open, onClose }: Props) {
   const [name, setName] = useState("");
   const [model, setModel] = useState("classic");
-  const { busy, error, run } = useAsyncAction();
+  const createPlayer = useCreatePlayer();
 
   useEffect(() => {
     if (open) {
@@ -25,12 +23,8 @@ export default function CreatePlayerDialog({ open, onClose, onCreated }: Props) 
     }
   }, [open]);
 
-  const handleSubmit = async () => {
-    const result = await run(() => createPlayer(name.trim(), model));
-    if (result !== null) {
-      onClose();
-      onCreated();
-    }
+  const handleSubmit = () => {
+    createPlayer.mutate({ name: name.trim(), skinModel: model }, { onSuccess: () => onClose() });
   };
 
   return (
@@ -40,11 +34,15 @@ export default function CreatePlayerDialog({ open, onClose, onCreated }: Props) 
       onClose={onClose}
       footer={
         <>
-          <Button variant="secondary" size="sm" onClick={onClose} disabled={busy}>
+          <Button variant="secondary" size="sm" onClick={onClose} disabled={createPlayer.isPending}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleSubmit} disabled={busy || !name.trim()}>
-            {busy ? "..." : "Add"}
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            disabled={createPlayer.isPending || !name.trim()}
+          >
+            {createPlayer.isPending ? "..." : "Add"}
           </Button>
         </>
       }
@@ -62,7 +60,7 @@ export default function CreatePlayerDialog({ open, onClose, onCreated }: Props) 
         <option value="classic">Classic</option>
         <option value="slim">Slim</option>
       </Select>
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {createPlayer.error && <p className="text-sm text-red-400">{createPlayer.error.message}</p>}
     </Dialog>
   );
 }
