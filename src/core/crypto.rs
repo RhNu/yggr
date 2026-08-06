@@ -22,8 +22,13 @@ use uuid::Uuid;
 
 /// 生成 RSA-4096 私钥(同时返回公钥);规范推荐长度,仅影响新生成的主签名密钥
 pub fn generate_keypair() -> Result<(RsaPrivateKey, RsaPublicKey)> {
+    generate_keypair_with_size(4096)
+}
+
+/// 生成指定位数的 RSA 密钥对;测试场景下使用 2048 以加速密钥生成
+pub fn generate_keypair_with_size(bits: usize) -> Result<(RsaPrivateKey, RsaPublicKey)> {
     let mut rng = OsRng;
-    let private = RsaPrivateKey::new(&mut rng, 4096).context("failed to generate RSA key")?;
+    let private = RsaPrivateKey::new(&mut rng, bits).context("failed to generate RSA key")?;
     let public = RsaPublicKey::from(&private);
     Ok((private, public))
 }
@@ -173,7 +178,7 @@ mod tests {
 
     #[test]
     fn test_sign_verify_roundtrip() {
-        let (private, public) = generate_keypair().unwrap();
+        let (private, public) = generate_keypair_with_size(2048).unwrap();
         let data = b"hello yggr";
         let sig = sign_sha1(&private, data).unwrap();
         assert!(verify_sha1(&public, data, &sig));

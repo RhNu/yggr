@@ -1,170 +1,16 @@
 //! 端到端集成测试:走通 Yggdrasil 全流程
-//! (meta → authenticate → validate → join → hasJoined → profile → 材质上传 → refresh → invalidate → signout)
+//! (meta -> authenticate -> validate -> join -> hasJoined -> profile -> 材质上传 -> refresh -> invalidate -> signout)
 
-use axum::Router;
+mod common;
+
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use base64::Engine;
-use http_body_util::BodyExt;
+use common::*;
 use serde_json::{Value, json};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
-
-use yggr::api::build_app;
-use yggr::app::state::{AppState, RateLimiter};
-use yggr::app::textures::TextureStore;
-use yggr::core::config::Config;
 use yggr::core::crypto;
-use yggr::core::db;
-
-const TEST_PASSWORD: &str = "test-password-123";
-const PLAYER_NAME: &str = "Steve";
-const USERNAME: &str = "admin@example.com";
-
-struct TestEnv {
-    app: Router,
-    player_id: String,
-    /// 128x64 的测试皮肤 PNG(RGBA)
-    skin_png: Vec<u8>,
-    public_key: rsa::RsaPublicKey,
-}
-
-async fn setup() -> TestEnv {
-    let dir = std::env::temp_dir().join(format!("yggr-test-{}", uuid::Uuid::new_v4()));
-    let config = Config {
-        base_url: "http://127.0.0.1:8080".to_string(),
-        data_dir: dir.clone(),
-        seed_file: None,
-        login_rate_limit_per_minute: 1000,
-        ..Config::default()
-    };
-    let config = Arc::new(config);
-    let pool = db::init_db(&dir.join("test.db")).await.unwrap();
-    let (private_key, public_key) = crypto::generate_keypair().unwrap();
-    let store = TextureStore::new(&dir).unwrap();
-
-    // 创建用户与角色
-    let user_id = crypto::random_uuid();
-    let password_hash = crypto::hash_password(TEST_PASSWORD).unwrap();
-    db::create_user(&pool, &user_id, USERNAME, &password_hash, "zh_CN")
-        .await
-        .unwrap();
-    let player_id = crypto::offline_uuid(PLAYER_NAME);
-    db::create_player(
-        &pool,
-        &player_id,
-        PLAYER_NAME,
-        &user_id,
-        None,
-        None,
-        "classic",
-    )
-    .await
-    .unwrap();
-
-    let state = AppState {
-        config,
-        pool,
-        store,
-        private_key: Arc::new(private_key),
-        public_key: public_key.clone(),
-        sessions: Arc::new(Mutex::new(std::collections::HashMap::new())),
-        limiter: Arc::new(RateLimiter::new(1000)),
-    };
-    let app = build_app(state);
-
-    // 生成 128x64 RGBA 测试皮肤
-    let mut out = Vec::new();
-    {
-        let mut encoder = png::Encoder::new(&mut out, 128, 64);
-        encoder.set_color(png::ColorType::Rgba);
-        encoder.set_depth(png::BitDepth::Eight);
-        let mut writer = encoder.write_header().unwrap();
-        writer
-            .write_image_data(&vec![0x80u8; 128 * 64 * 4])
-            .unwrap();
-    }
-
-    TestEnv {
-        app,
-        player_id,
-        skin_png: out,
-        public_key,
-    }
-}
-
-async fn call(
-    app: &Router,
-    method: Method,
-    path: &str,
-    body: Option<Value>,
-    bearer: Option<&str>,
-) -> (StatusCode, Value) {
-    let mut builder = Request::builder().method(method).uri(path);
-    if let Some(b) = bearer {
-        builder = builder.header(header::AUTHORIZATION, format!("Bearer {}", b));
-    }
-    if let Some(json) = body {
-        builder = builder.header(header::CONTENT_TYPE, "application/json");
-        let req = builder
-            .extension(axum::extract::ConnectInfo(SocketAddr::from((
-                IpAddr::V4(Ipv4Addr::LOCALHOST),
-                12345,
-            ))))
-            .body(Body::from(json.to_string()))
-            .unwrap();
-        let res = app.clone().oneshot(req).await.unwrap();
-        let status = res.status();
-        let bytes = res.into_body().collect().await.unwrap().to_bytes();
-        let value = if bytes.is_empty() {
-            Value::Null
-        } else {
-            serde_json::from_slice(&bytes).unwrap_or(Value::Null)
-        };
-        (status, value)
-    } else {
-        let req = builder
-            .extension(axum::extract::ConnectInfo(SocketAddr::from((
-                IpAddr::V4(Ipv4Addr::LOCALHOST),
-                12345,
-            ))))
-            .body(Body::empty())
-            .unwrap();
-        let res = app.clone().oneshot(req).await.unwrap();
-        let status = res.status();
-        let bytes = res.into_body().collect().await.unwrap().to_bytes();
-        let value = if bytes.is_empty() {
-            Value::Null
-        } else {
-            serde_json::from_slice(&bytes).unwrap_or(Value::Null)
-        };
-        (status, value)
-    }
-}
-
-async fn authenticate(app: &Router) -> (String, String) {
-    let (status, res) = call(
-        app,
-        Method::POST,
-        "/authserver/authenticate",
-        Some(json!({
-            "username": USERNAME,
-            "password": TEST_PASSWORD,
-            "requestUser": true
-        })),
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(res["selectedProfile"]["name"], PLAYER_NAME);
-    assert_eq!(res["availableProfiles"][0]["name"], PLAYER_NAME);
-    assert_eq!(res["user"]["properties"][0]["name"], "preferredLanguage");
-    (
-        res["accessToken"].as_str().unwrap().to_string(),
-        res["clientToken"].as_str().unwrap().to_string(),
-    )
-}
 
 #[tokio::test]
 async fn full_yggdrasil_flow() {
@@ -197,7 +43,7 @@ async fn full_yggdrasil_flow() {
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
-    // 4. 错误密码 → 403 ForbiddenOperationException
+    // 4. 错误密码 -> 403 ForbiddenOperationException
     let (status, err) = call(
         app,
         Method::POST,
@@ -209,7 +55,7 @@ async fn full_yggdrasil_flow() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(err["error"], "ForbiddenOperationException");
 
-    // 5. join → hasJoined
+    // 5. join -> hasJoined
     let server_id = "server-test-123";
     let (status, _) = call(
         app,
@@ -254,7 +100,7 @@ async fn full_yggdrasil_flow() {
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
-    // 错误的角色 join → 403
+    // 错误的角色 join -> 403
     let (status, _) = call(
         app,
         Method::POST,
@@ -299,7 +145,7 @@ async fn full_yggdrasil_flow() {
     assert_eq!(res.as_array().unwrap().len(), 1);
     assert_eq!(res[0]["name"], PLAYER_NAME);
 
-    // 8. 上传皮肤 → profile 含签名 textures → 下载材质
+    // 8. 上传皮肤 -> profile 含签名 textures -> 下载材质
     let boundary = "----yggr-test-boundary";
     let multipart = format!(
         "--{b}\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nslim\r\n--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"skin.png\"\r\nContent-Type: image/png\r\n\r\n",
@@ -328,7 +174,7 @@ async fn full_yggdrasil_flow() {
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
 
-    // 未认证上传 → 401
+    // 未认证上传 -> 401
     let (status, _) = call(
         app,
         Method::PUT,
@@ -476,106 +322,6 @@ async fn full_yggdrasil_flow() {
         Method::POST,
         "/authserver/validate",
         Some(json!({"accessToken": token2})),
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-}
-
-#[tokio::test]
-async fn token_limit_revokes_oldest() {
-    let env = setup().await;
-    let app = &env.app;
-
-    // 连续登录 11 次(上限 auth.rs::MAX_TOKENS_PER_USER = 10)
-    let mut tokens = Vec::new();
-    for _ in 0..11 {
-        let (status, res) = call(
-            app,
-            Method::POST,
-            "/authserver/authenticate",
-            Some(json!({"username": USERNAME, "password": TEST_PASSWORD})),
-            None,
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK);
-        tokens.push(res["accessToken"].as_str().unwrap().to_string());
-        // 保证 issued_at(毫秒)有区分度,使"吊销最旧"断言确定(避免同毫秒退化为随机排序)
-        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
-    }
-
-    // 最早颁发的令牌已被吊销(超限吊销最旧)
-    let (status, _) = call(
-        app,
-        Method::POST,
-        "/authserver/validate",
-        Some(json!({"accessToken": tokens[0]})),
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-
-    // 最新令牌仍然有效
-    let (status, _) = call(
-        app,
-        Method::POST,
-        "/authserver/validate",
-        Some(json!({"accessToken": tokens[10]})),
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
-}
-
-#[tokio::test]
-async fn non_email_login_and_role_name() {
-    let env = setup().await;
-    let app = &env.app;
-
-    // 使用角色名登录(用户存在时用户名优先,这里用户名为邮箱,角色名可登录)
-    let (status, res) = call(
-        app,
-        Method::POST,
-        "/authserver/authenticate",
-        Some(json!({
-            "username": PLAYER_NAME,
-            "password": TEST_PASSWORD
-        })),
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    // 角色名登录自动绑定角色
-    assert_eq!(res["selectedProfile"]["name"], PLAYER_NAME);
-}
-
-#[tokio::test]
-async fn refresh_with_profile_selection_errors() {
-    let env = setup().await;
-    let app = &env.app;
-    let (access_token, _) = authenticate(app).await;
-
-    // 令牌已绑定角色,再指定角色 → 400
-    let (status, err) = call(
-        app,
-        Method::POST,
-        "/authserver/refresh",
-        Some(json!({
-            "accessToken": access_token,
-            "selectedProfile": {"id": env.player_id, "name": PLAYER_NAME}
-        })),
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(err["error"], "IllegalArgumentException");
-
-    // 无效令牌 → 403
-    let (status, _) = call(
-        app,
-        Method::POST,
-        "/authserver/validate",
-        Some(json!({"accessToken": "invalid-token"})),
         None,
     )
     .await;
