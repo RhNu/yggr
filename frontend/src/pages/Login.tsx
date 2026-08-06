@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { login } from "../api";
-import { setToken } from "../store";
+import { useAuthStore } from "../store/authStore";
+import Input from "../components/ui/Input";
+import Button from "../components/ui/Button";
 
-export default function Login({ onLogin }: { onLogin: () => void }) {
+export default function Login() {
+  const setAuth = useAuthStore((s) => s.setAuth);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -14,8 +17,7 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
     setLoading(true);
     try {
       const { access_token, client_token } = await login(username, password);
-      setToken(access_token, client_token);
-      onLogin();
+      setAuth(access_token, client_token);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -24,33 +26,39 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
   };
 
   return (
-    <div className="login-form">
-      <h1>Yggr</h1>
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label>Username</label>
-          <input
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-sm rounded-xl border border-white/10 bg-neutral-900/60 backdrop-blur-md p-8 shadow-2xl">
+        <h1 className="text-2xl font-bold text-center text-neutral-100 mb-8">
+          YggR
+        </h1>
+        <form onSubmit={handleSubmit}>
+          <Input
+            label="Username"
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoFocus
             required
           />
-        </div>
-        <div className="form-group">
-          <label>Password</label>
-          <input
+          <Input
+            label="Password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-        </div>
-        {error && <div className="error-msg">{error}</div>}
-        <button type="submit" disabled={loading} style={{ width: "100%" }}>
-          {loading ? "..." : "Login"}
-        </button>
-      </form>
+          {error && (
+            <p className="text-sm text-red-400 mb-4">{error}</p>
+          )}
+          <Button
+            type="submit"
+            disabled={loading}
+            className="w-full"
+          >
+            {loading ? "..." : "Login"}
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }

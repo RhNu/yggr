@@ -10,6 +10,8 @@ import SkinPreview from "./SkinPreview";
 import UploadSkinDialog from "./UploadSkinDialog";
 import UploadCapeDialog from "./UploadCapeDialog";
 import ConfirmDialog from "./ui/ConfirmDialog";
+import Button from "./ui/Button";
+import Select from "./ui/Select";
 import { useAsyncAction } from "../hooks/useAsyncAction";
 
 interface Props {
@@ -47,16 +49,17 @@ export default function PlayerCard({ player, onChanged }: Props) {
   const capeUrl = player.cape_hash ? textureUrl(player.cape_hash) : null;
 
   return (
-    <div className="player-card">
-      <div className="player-card-header">
-        <h3>{player.name}</h3>
-        <button
-          className="danger btn-sm"
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-md p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-base font-medium text-neutral-100">{player.name}</h3>
+        <Button
+          variant="danger"
+          size="sm"
           onClick={() => setShowDelete(true)}
           disabled={busy}
         >
           Delete
-        </button>
+        </Button>
       </div>
 
       <SkinPreview
@@ -65,56 +68,62 @@ export default function PlayerCard({ player, onChanged }: Props) {
         skinModel={player.skin_model as "classic" | "slim"}
       />
 
-      {error && <div className="error-msg">{error}</div>}
+      {error && (
+        <p className="text-sm text-red-400 mb-3">{error}</p>
+      )}
 
-      <div className="info-row">
-        <label>Model:</label>
-        <select
-          className="model-select"
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs text-neutral-500">Model:</span>
+        <Select
           value={player.skin_model}
           onChange={(e) => handleModelChange(e.target.value)}
           disabled={busy}
+          className="w-auto py-1 px-2 text-xs"
         >
           <option value="classic">Classic</option>
           <option value="slim">Slim</option>
-        </select>
+        </Select>
       </div>
 
-      <div className="player-card-actions">
-        <button
-          className="secondary btn-sm"
+      <div className="flex flex-wrap gap-2 mb-2">
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => setShowUploadSkin(true)}
           disabled={busy}
         >
           Upload Skin
-        </button>
+        </Button>
         {player.skin_hash && (
-          <button
-            className="secondary btn-sm"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => handleDeleteTexture("skin")}
             disabled={busy}
           >
             Remove Skin
-          </button>
+          </Button>
         )}
       </div>
 
-      <div className="player-card-actions" style={{ marginTop: 8 }}>
-        <button
-          className="secondary btn-sm"
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => setShowUploadCape(true)}
           disabled={busy}
         >
           Upload Cape
-        </button>
+        </Button>
         {player.cape_hash && (
-          <button
-            className="secondary btn-sm"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => handleDeleteTexture("cape")}
             disabled={busy}
           >
             Remove Cape
-          </button>
+          </Button>
         )}
       </div>
 

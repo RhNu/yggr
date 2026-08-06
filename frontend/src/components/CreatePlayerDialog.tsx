@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import Dialog from "./ui/Dialog";
+import Button from "./ui/Button";
+import Input from "./ui/Input";
+import Select from "./ui/Select";
 import { useAsyncAction } from "../hooks/useAsyncAction";
 import { createPlayer } from "../api";
 
@@ -9,7 +12,11 @@ interface Props {
   onCreated: () => void;
 }
 
-export default function CreatePlayerDialog({ open, onClose, onCreated }: Props) {
+export default function CreatePlayerDialog({
+  open,
+  onClose,
+  onCreated,
+}: Props) {
   const [name, setName] = useState("");
   const [model, setModel] = useState("classic");
   const { busy, error, run } = useAsyncAction();
@@ -36,42 +43,42 @@ export default function CreatePlayerDialog({ open, onClose, onCreated }: Props) 
       onClose={onClose}
       footer={
         <>
-          <button
-            className="secondary btn-sm"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onClose}
             disabled={busy}
           >
             Cancel
-          </button>
-          <button
-            className="btn-sm"
+          </Button>
+          <Button
+            size="sm"
             onClick={handleSubmit}
             disabled={busy || !name.trim()}
           >
             {busy ? "..." : "Add"}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="form-group">
-        <label>Player Name</label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="3-16 chars, a-z A-Z 0-9 _"
-          maxLength={16}
-          autoFocus
-        />
-      </div>
-      <div className="form-group">
-        <label>Model</label>
-        <select value={model} onChange={(e) => setModel(e.target.value)}>
-          <option value="classic">Classic</option>
-          <option value="slim">Slim</option>
-        </select>
-      </div>
-      {error && <div className="error-msg">{error}</div>}
+      <Input
+        label="Player Name"
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="3-16 chars, a-z A-Z 0-9 _"
+        maxLength={16}
+        autoFocus
+      />
+      <Select
+        label="Model"
+        value={model}
+        onChange={(e) => setModel(e.target.value)}
+      >
+        <option value="classic">Classic</option>
+        <option value="slim">Slim</option>
+      </Select>
+      {error && <p className="text-sm text-red-400">{error}</p>}
     </Dialog>
   );
 }

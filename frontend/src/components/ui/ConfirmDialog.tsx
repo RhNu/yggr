@@ -1,4 +1,5 @@
 import Dialog from "./Dialog";
+import Button from "./Button";
 
 interface Props {
   open: boolean;
@@ -28,20 +29,16 @@ export default function ConfirmDialog({
       onClose={onCancel}
       footer={
         <>
-          <button
-            className="secondary btn-sm"
-            onClick={onCancel}
-            disabled={busy}
-          >
+          <Button variant="secondary" size="sm" onClick={onCancel} disabled={busy}>
             {cancelLabel}
-          </button>
-          <button className="danger btn-sm" onClick={onConfirm} disabled={busy}>
+          </Button>
+          <Button variant="danger" size="sm" onClick={onConfirm} disabled={busy}>
             {busy ? "..." : confirmLabel}
-          </button>
+          </Button>
         </>
       }
     >
-      <p className="confirm-message">{message}</p>
+      <p className="text-sm text-neutral-300">{message}</p>
     </Dialog>
   );
 }

@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import Dialog from "./ui/Dialog";
+import Button from "./ui/Button";
+import Input from "./ui/Input";
+import Select from "./ui/Select";
 import SkinPreview from "./SkinPreview";
 import { useAsyncAction } from "../hooks/useAsyncAction";
 import { uploadTexture, textureUrl, type Player } from "../api";
@@ -68,33 +71,34 @@ export default function UploadSkinDialog({
       onClose={onClose}
       footer={
         <>
-          <button
-            className="secondary btn-sm"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onClose}
             disabled={busy}
           >
             Cancel
-          </button>
-          <button
-            className="btn-sm"
+          </Button>
+          <Button
+            size="sm"
             onClick={handleConfirm}
             disabled={busy || !file}
           >
             {busy ? "..." : "Confirm Upload"}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="skin-comparison">
-        <div className="skin-comparison-item">
-          <label>Current</label>
+      <div className="flex gap-4 mb-4">
+        <div className="flex-1">
+          <label className="block text-xs text-neutral-500 mb-1.5">Current</label>
           <SkinPreview
             skinUrl={currentSkinUrl}
             skinModel={player.skin_model as "classic" | "slim"}
           />
         </div>
-        <div className="skin-comparison-item">
-          <label>New</label>
+        <div className="flex-1">
+          <label className="block text-xs text-neutral-500 mb-1.5">New</label>
           <SkinPreview
             skinUrl={previewUrl}
             skinModel={model as "classic" | "slim"}
@@ -102,20 +106,23 @@ export default function UploadSkinDialog({
         </div>
       </div>
 
-      <div className="form-group">
-        <label>Skin File</label>
-        <input type="file" accept="image/png" onChange={handleFileSelect} />
-      </div>
+      <Input
+        label="Skin File"
+        type="file"
+        accept="image/png"
+        onChange={handleFileSelect}
+      />
 
-      <div className="form-group">
-        <label>Model</label>
-        <select value={model} onChange={(e) => setModel(e.target.value)}>
-          <option value="classic">Classic</option>
-          <option value="slim">Slim</option>
-        </select>
-      </div>
+      <Select
+        label="Model"
+        value={model}
+        onChange={(e) => setModel(e.target.value)}
+      >
+        <option value="classic">Classic</option>
+        <option value="slim">Slim</option>
+      </Select>
 
-      {error && <div className="error-msg">{error}</div>}
+      {error && <p className="text-sm text-red-400">{error}</p>}
     </Dialog>
   );
 }

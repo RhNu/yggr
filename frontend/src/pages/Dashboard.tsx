@@ -1,65 +1,66 @@
-import { useState } from "react";
-import { usePlayers } from "../hooks/usePlayers";
+import { useEffect, useState } from "react";
+import { usePlayerStore } from "../store/playerStore";
+import { useAuthStore } from "../store/authStore";
 import PlayerCard from "../components/PlayerCard";
 import CreatePlayerDialog from "../components/CreatePlayerDialog";
-import { clearToken } from "../store";
+import Button from "../components/ui/Button";
 
-interface Props {
-  onLogout: () => void;
-}
-
-export default function Dashboard({ onLogout }: Props) {
-  const { me, error, loading, refresh } = usePlayers(onLogout);
+export default function Dashboard() {
+  const { me, error, loading, refresh } = usePlayerStore();
+  const logout = useAuthStore((s) => s.logout);
   const [showCreate, setShowCreate] = useState(false);
 
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
   const handleLogout = () => {
-    clearToken();
-    onLogout();
+    logout();
   };
 
-  if (loading) {
+  if (loading && !me) {
     return (
-      <div className="app">
-        <p style={{ textAlign: "center", color: "var(--text-dim)" }}>
-          Loading...
-        </p>
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <p className="text-center text-neutral-500">Loading...</p>
       </div>
     );
   }
 
   return (
-    <div className="app">
-      <div className="header">
-        <h1>Yggr</h1>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <span style={{ fontSize: 13, color: "var(--text-dim)" }}>
-            {me?.username}
-          </span>
-          <button className="secondary btn-sm" onClick={handleLogout}>
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      <header className="flex items-center justify-between mb-6 pb-4 border-b border-white/10">
+        <h1 className="text-xl font-semibold text-neutral-100">YggR</h1>
+        <div className="flex items-center gap-3">
+          {me && (
+            <span className="text-sm text-neutral-500">{me.username}</span>
+          )}
+          <Button variant="secondary" size="sm" onClick={handleLogout}>
             Logout
-          </button>
+          </Button>
         </div>
-      </div>
+      </header>
 
-      {error && <div className="error-msg">{error}</div>}
+      {error && (
+        <p className="text-sm text-red-400 mb-4">{error}</p>
+      )}
 
-      <div style={{ marginBottom: 16 }}>
-        <button className="btn-sm" onClick={() => setShowCreate(true)}>
+      <div className="mb-6">
+        <Button size="sm" onClick={() => setShowCreate(true)}>
           Add Character
-        </button>
+        </Button>
       </div>
 
       {me && me.players.length > 0 ? (
-        <div className="player-grid">
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(360px,1fr))]">
           {me.players.map((p) => (
             <PlayerCard key={p.id} player={p} onChanged={refresh} />
           ))}
         </div>
       ) : (
         !error && (
-          <div className="no-skin">
+          <p className="text-center text-sm text-neutral-500 py-10">
             No players yet. Click "Add Character" to create one.
-          </div>
+          </p>
         )
       )}
 

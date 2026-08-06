@@ -1,4 +1,4 @@
-import { getToken } from "./store";
+import { getToken } from "./store/authStore";
 
 const API_BASE = "";
 

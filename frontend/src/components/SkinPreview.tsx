@@ -64,8 +64,7 @@ export default function SkinPreview({ skinUrl, capeUrl, skinModel }: Props) {
   return (
     <div
       ref={containerRef}
-      className="skin-preview-container"
-      style={{ minHeight: 300 }}
+      className="w-full h-[300px] flex items-center justify-center rounded-md bg-white/5 mb-3"
     />
   );
 }
