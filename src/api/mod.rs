@@ -38,7 +38,7 @@ const ALI_LOCATION: &str = "/service";
 /// 根路径 GET / - 返回 ALI 头;若前端 index.html 存在则同时返回前端入口
 async fn root(axum::extract::State(state): axum::extract::State<AppState>) -> Response<Body> {
     let builder = Response::builder().header("x-authlib-injector-api-location", ALI_LOCATION);
-    if let Some(dir) = &state.config.frontend_dir {
+    if let Some(dir) = &state.config.frontend.dir {
         let index = dir.join("index.html");
         if let Ok(data) = std::fs::read(&index) {
             return builder
@@ -137,7 +137,7 @@ pub fn build_app(state: AppState) -> Router {
         .with_state(state.clone());
 
     // 前端静态文件 fallback
-    if let Some(dir) = &state.config.frontend_dir
+    if let Some(dir) = &state.config.frontend.dir
         && dir.exists()
     {
         router = router.fallback_service(ServeDir::new(dir));

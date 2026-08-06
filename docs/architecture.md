@@ -124,7 +124,7 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TD
-    A[seed.toml 指定 uuid?] -->|是| B[直接使用, 校验合法性]
+    A[config/seed.toml 指定 uuid?] -->|是| B[直接使用, 校验合法性]
     A -->|否| C{player_uuid_generation}
     C -->|offline| D[MD5 离线兼容]
     C -->|random| E[随机 UUID v4]
@@ -133,7 +133,7 @@ flowchart TD
 
 - **离线兼容**(默认):`MD5("OfflinePlayer:" + name)` 摘要后按 Java `UUID.nameUUIDFromBytes` 规则设置 version=3、IETF variant,输出无符号字符串。可无缝迁移离线服存档。
 - **随机**:UUID v4。
-- **手动指定**:seed.toml 中逐角色指定(支持带连字符格式,自动规范化)。
+- **手动指定**:config/seed.toml 中逐角色指定(支持带连字符格式,自动规范化)。
 
 ---
 
@@ -147,7 +147,7 @@ src/
 ├── lib.rs               模块声明与分层 re-export(兼容旧路径);build_app 在 api 层
 ├── core/                基础设施层(无 HTTP 处理器,不依赖业务)
 │   ├── mod.rs           聚合导出(config/crypto/db/error/types)
-│   ├── config.rs        配置解析(TOML)与默认值;材质域名白名单推导
+│   ├── config.rs        配置解析(TOML 分区结构)与默认值;环境变量覆盖;材质域名白名单推导
 │   ├── crypto.rs        RSA 密钥生成与加载、SHA1withRSA 签名、argon2id、离线 UUID、随机令牌
 │   ├── error.rs         ApiError(统一错误格式)-> IntoResponse
 │   ├── types.rs         公共序列化类型(JsonResponse / Property / ProfileResponse / UserResponse)
@@ -231,13 +231,21 @@ tokens (
 -- 索引:players(user_id)、tokens(user_id)、tokens(player_id)
 ```
 
-数据文件布局(`data_dir`,默认 `data/`):
+数据文件布局(`data_dir`,默认 `data/`,可通过环境变量 `YGGR_DATA_DIR` 覆盖):
 
 ```
 data/
 ├── yggr.db           SQLite 数据库
 ├── private_key.pem   签名私钥(PKCS#8 PEM,首次启动自动生成,勿泄露/勿更换)
 └── textures/         材质内容寻址存储 {sha256}.png
+```
+
+配置文件布局(`config_dir`,默认 `config/`,可通过环境变量 `YGGR_CONFIG_DIR` 覆盖):
+
+```
+config/
+├── config.toml       主配置文件
+└── seed.toml         种子用户/角色配置(可选)
 ```
 
 ---
@@ -521,7 +529,7 @@ Minecraft 1.19+ 聊天消息签名(由 `feature.enable_profile_key: true` 开启
 ### 6.5 部署安全
 
 - **必须 HTTPS**:生产环境置于反向代理(Nginx/Caddy)之后,`base_url` 填 HTTPS 域名,代理透传 `X-Forwarded-For`。
-- `seed.toml` 含明文密码,勿提交版本库。
+- `config/seed.toml` 含明文密码,勿提交版本库。
 - 密钥文件 `private_key.pem` 权限收紧,丢失即所有已签名属性失效。
 
 ---
@@ -559,26 +567,46 @@ sequenceDiagram
 
 ## 8. 配置参考
 
-| 配置项                        | 默认                    | 说明                               |
-| ----------------------------- | ----------------------- | ---------------------------------- |
-| `server_name`                 | `My Yggdrasil`          | meta.serverName                    |
-| `base_url`                    | `http://127.0.0.1:8080` | 材质 URL 基准 + skinDomains 推导   |
-| `listen`                      | `0.0.0.0:8080`          | 监听地址                           |
-| `data_dir`                    | `data`                  | 数据库/密钥/材质目录               |
-| `player_uuid_generation`      | `offline`               | `offline`/`random`                 |
-| `token_ttl_days`              | `15`                    | 令牌有效期                         |
-| `token_active_window_days`    | `15`                    | 令牌有效窗口;小于 ttl 启用暂时失效 |
-| `non_email_login`             | `true`                  | 角色名登录 + meta feature          |
-| `skin_domains`                | `[]`                    | 追加白名单规则                     |
-| `check_ip`                    | `false`                 | hasJoined IP 校验                  |
-| `login_rate_limit_per_minute` | `10`                    | 每 IP 限流,0 禁用                  |
-| `seed_file`                   | `seed.toml`             | 种子配置,`None`/空禁用             |
-| `implementation_name/version` | `yggr` / 包版本         | meta 信息                          |
-| `legacy_skin_api`             | `false`                 | 旧式皮肤 API 服务端处理            |
-| `no_mojang_namespace`         | `false`                 | 禁用 @mojang 命名空间              |
-| `enable_mojang_anti_features` | `false`                 | 开启 Minecraft anti-features       |
-| `username_check`              | `false`                 | 启用用户名验证                     |
-| `register_url`                | `None`                  | 注册页面地址(meta.links.register)  |
+配置文件采用分区结构(TOML sections),见 `config/config.example.toml`:
+
+| 配置项                              | 默认                    | 说明                               |
+| ----------------------------------- | ----------------------- | ---------------------------------- |
+| `[server]`                          |                         | 服务器基本配置                      |
+| `name`                              | `My Yggdrasil`          | meta.serverName                    |
+| `base_url`                          | `http://127.0.0.1:8080` | 材质 URL 基准 + skinDomains 推导   |
+| `listen`                            | `0.0.0.0:8080`          | 监听地址                           |
+| `skin_domains`                      | `[]`                    | 追加白名单规则                     |
+| `[data]`                            |                         | 数据目录                           |
+| `dir`                               | `data`                  | 数据库/密钥/材质目录(YGGR_DATA_DIR 覆盖) |
+| `[auth]`                            |                         | 认证配置                           |
+| `player_uuid_generation`            | `offline`               | `offline`/`random`                 |
+| `token_ttl_days`                    | `15`                    | 令牌有效期                         |
+| `token_active_window_days`          | `15`                    | 令牌有效窗口;小于 ttl 启用暂时失效 |
+| `non_email_login`                   | `true`                  | 角色名登录 + meta feature          |
+| `login_rate_limit_per_minute`       | `10`                    | 每 IP 限流,0 禁用                  |
+| `check_ip`                          | `false`                 | hasJoined IP 校验                  |
+| `max_players_per_user`              | `5`                     | 每用户角色数量上限                  |
+| `[seed]`                            |                         | 种子配置                           |
+| `file`                              | `seed.toml`             | 种子配置,相对配置目录;`None` 禁用  |
+| `[meta]`                            |                         | 实现信息                           |
+| `implementation_name`               | `yggr`                  | meta.implementationName            |
+| `implementation_version`            | 包版本                  | meta.implementationVersion         |
+| `register_url`                      | `None`                  | 注册页面地址(meta.links.register)  |
+| `[features]`                        |                         | 高级功能选项                       |
+| `legacy_skin_api`                   | `false`                 | 旧式皮肤 API 服务端处理            |
+| `no_mojang_namespace`               | `false`                 | 禁用 @mojang 命名空间              |
+| `enable_mojang_anti_features`       | `false`                 | 开启 Minecraft anti-features       |
+| `username_check`                    | `false`                 | 启用用户名验证                     |
+| `[frontend]`                        |                         | 前端配置                           |
+| `dir`                               | `frontend/dist`         | 前端目录(YGGR_FRONTEND_DIR 覆盖)   |
+
+环境变量覆盖:
+
+| 环境变量           | 默认             | 说明                       |
+| ------------------ | ---------------- | -------------------------- |
+| `YGGR_CONFIG_DIR`  | `config`         | 配置目录                   |
+| `YGGR_DATA_DIR`    | `[data] dir`     | 数据目录                   |
+| `YGGR_FRONTEND_DIR`| `[frontend] dir` | 前端目录                   |
 
 ---
 

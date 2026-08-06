@@ -1,0 +1,84 @@
+# yggr 配置示例 - 复制为 config.toml 后修改
+#
+# 目录结构:
+#   config/  配置文件(config.toml, seed.toml)
+#   data/    数据文件(数据库、密钥、材质)
+#
+# 环境变量覆盖(优先于配置文件):
+#   YGGR_CONFIG_DIR   配置目录(默认 config)
+#   YGGR_DATA_DIR     数据目录(默认 [data] dir)
+#   YGGR_FRONTEND_DIR 前端目录(默认 [frontend] dir)
+
+[server]
+# 服务器名称(显示在启动器的 meta.serverName)
+name = "YggR"
+
+# 外部访问基础 URL (用于生成材质 URL)
+# 例如 https://ygg.example.com 或 http://127.0.0.1:8080
+base_url = "http://127.0.0.1:8080"
+
+# 监听地址
+listen = "0.0.0.0:8080"
+
+# 额外的材质域名白名单规则 (默认已包含 base_url 的域名)
+# 规则以 . 开头匹配子域, 否则精确匹配
+skin_domains = []
+
+[data]
+# 数据目录(数据库、签名密钥、材质文件), 相对工作目录
+# 环境变量 YGGR_DATA_DIR 可覆盖此值
+dir = "data"
+
+[auth]
+# 角色 UUID 生成策略:offline(离线兼容)或 random(随机 v4)
+# seed.toml 中显式指定 uuid 的角色不受此影响
+player_uuid_generation = "offline"
+
+# 令牌有效期(天)
+token_ttl_days = 15
+
+# 令牌有效窗口(天);超过此窗口但在 token_ttl_days 内的令牌为暂时失效(仅可刷新)
+# 默认等于 token_ttl_days,即不启用暂时失效
+# token_active_window_days = 15
+
+# 允许使用角色名登录
+non_email_login = true
+
+# 登录 /signout 每 IP 每分钟限流次数 (0 表示不限)
+login_rate_limit_per_minute = 10
+
+# hasJoined 时校验客户端 IP (开启后经代理需正确传递 X-Forwarded-For)
+check_ip = false
+
+# 每用户角色数量上限
+max_players_per_user = 5
+
+[seed]
+# 种子配置文件(启动时创建用户与角色); 相对路径基于配置目录; None 表示禁用
+file = "seed.toml"
+
+[meta]
+# 实现信息 (显示在 meta)
+implementation_name = "yggr"
+implementation_version = "0.1.0"
+
+# 注册页面地址(显示在 meta.links.register); 不设置则不输出
+# register_url = "https://ygg.example.com/register"
+
+[features]
+# 旧式皮肤 API 由服务端处理
+legacy_skin_api = false
+
+# 禁用 @mojang 命名空间
+no_mojang_namespace = false
+
+# 开启 Minecraft anti-features
+enable_mojang_anti_features = false
+
+# 启用用户名验证(非英文字符无法进服)
+username_check = false
+
+[frontend]
+# 前端静态文件目录 (为空则不提供前端管理界面)
+# 环境变量 YGGR_FRONTEND_DIR 可覆盖此值
+dir = "frontend/dist"

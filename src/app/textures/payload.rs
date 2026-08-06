@@ -39,7 +39,7 @@ pub fn build_textures_value(
             "url".to_string(),
             serde_json::Value::String(format!(
                 "{}/service/textures/{}",
-                config.base_url.trim_end_matches('/'),
+                config.server.base_url.trim_end_matches('/'),
                 skin_hash
             )),
         );
@@ -59,7 +59,7 @@ pub fn build_textures_value(
             "url".to_string(),
             serde_json::Value::String(format!(
                 "{}/service/textures/{}",
-                config.base_url.trim_end_matches('/'),
+                config.server.base_url.trim_end_matches('/'),
                 cape_hash
             )),
         );

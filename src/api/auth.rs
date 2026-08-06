@@ -45,7 +45,7 @@ pub fn token_status(tok: &Token, config: &crate::core::config::Config) -> TokenS
         return TokenStatus::Invalid;
     }
     if config.temp_invalidation_enabled() {
-        let active_ms = config.token_active_window_days * 24 * 3600 * 1000;
+        let active_ms = config.auth.token_active_window_days * 24 * 3600 * 1000;
         if tok.issued_at + active_ms <= now {
             return TokenStatus::TemporarilyInvalid;
         }
@@ -176,7 +176,7 @@ pub async fn authenticate(
         .map_err(db_err)?
     {
         u
-    } else if state.config.non_email_login {
+    } else if state.config.auth.non_email_login {
         match crate::core::db::get_player_by_name(pool, &req.username)
             .await
             .map_err(db_err)?
@@ -212,7 +212,7 @@ pub async fn authenticate(
     let client_token = req.client_token.unwrap_or_else(random_uuid);
     let access_token = random_token();
     let now = now_millis();
-    let ttl = state.config.token_ttl_days * 24 * 3600 * 1000;
+    let ttl = state.config.auth.token_ttl_days * 24 * 3600 * 1000;
     create_token(
         pool,
         &access_token,
@@ -285,7 +285,7 @@ pub async fn refresh(
     // 颁发新令牌(相同 clientToken);先建后删,保证失败时原令牌依然有效
     let access_token = random_token();
     let now = now_millis();
-    let ttl = state.config.token_ttl_days * 24 * 3600 * 1000;
+    let ttl = state.config.auth.token_ttl_days * 24 * 3600 * 1000;
     create_token(
         pool,
         &access_token,

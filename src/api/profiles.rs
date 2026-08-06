@@ -266,7 +266,7 @@ pub async fn legacy_skin(
     State(state): State<AppState>,
     Path(username): Path<String>,
 ) -> ApiResult<impl IntoResponse> {
-    if !state.config.legacy_skin_api {
+    if !state.config.features.legacy_skin_api {
         return Ok(StatusCode::NOT_FOUND.into_response());
     }
     let player = get_player_by_id(&state.pool, &username)

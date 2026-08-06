@@ -65,34 +65,34 @@ pub async fn meta(State(state): State<AppState>) -> ApiResult<impl IntoResponse>
         .map_err(|e| crate::core::error::ApiError::internal(e.to_string()))?;
 
     let meta = Meta {
-        server_name: state.config.server_name.clone(),
-        implementation_name: state.config.implementation_name.clone(),
-        implementation_version: state.config.implementation_version.clone(),
-        feature_non_email_login: state.config.non_email_login,
+        server_name: state.config.server.name.clone(),
+        implementation_name: state.config.meta.implementation_name.clone(),
+        implementation_version: state.config.meta.implementation_version.clone(),
+        feature_non_email_login: state.config.auth.non_email_login,
         feature_enable_profile_key: true,
-        feature_legacy_skin_api: if state.config.legacy_skin_api {
+        feature_legacy_skin_api: if state.config.features.legacy_skin_api {
             Some(true)
         } else {
             None
         },
-        feature_no_mojang_namespace: if state.config.no_mojang_namespace {
+        feature_no_mojang_namespace: if state.config.features.no_mojang_namespace {
             Some(true)
         } else {
             None
         },
-        feature_enable_mojang_anti_features: if state.config.enable_mojang_anti_features {
+        feature_enable_mojang_anti_features: if state.config.features.enable_mojang_anti_features {
             Some(true)
         } else {
             None
         },
-        feature_username_check: if state.config.username_check {
+        feature_username_check: if state.config.features.username_check {
             Some(true)
         } else {
             None
         },
         links: MetaLinks {
-            homepage: state.config.base_url.clone(),
-            register: state.config.register_url.clone(),
+            homepage: state.config.server.base_url.clone(),
+            register: state.config.meta.register_url.clone(),
         },
     };
 

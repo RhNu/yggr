@@ -53,7 +53,7 @@ fn default_model() -> String {
 
 /// 应用种子配置:已存在的用户名/角色名跳过
 pub async fn apply_seed(config: &Config, pool: &SqlitePool, store: &TextureStore) -> Result<()> {
-    let Some(seed_path) = &config.seed_file else {
+    let Some(seed_path) = &config.seed.file else {
         return Ok(());
     };
     if !seed_path.exists() {
@@ -100,7 +100,7 @@ pub async fn apply_seed(config: &Config, pool: &SqlitePool, store: &TextureStore
 
             let player_id = match &player_cfg.uuid {
                 Some(u) => normalize_uuid(u)?,
-                None => match config.player_uuid_generation {
+                None => match config.auth.player_uuid_generation {
                     UuidGeneration::Offline => offline_uuid(&player_cfg.name),
                     UuidGeneration::Random => random_uuid(),
                 },

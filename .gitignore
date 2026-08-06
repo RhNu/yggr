@@ -2,9 +2,9 @@
 /target
 
 # Application
-/data
-/config.toml
-/seed.toml
+/data/
+/config/*.toml
+!/config/*.example.toml
 
 # Frontend
 node_modules/

@@ -47,10 +47,16 @@ fn make_skin_png() -> Vec<u8> {
 pub async fn setup() -> TestEnv {
     let dir = std::env::temp_dir().join(format!("yggr-test-{}", uuid::Uuid::new_v4()));
     let config = Config {
-        base_url: "http://127.0.0.1:8080".to_string(),
-        data_dir: dir.clone(),
-        seed_file: None,
-        login_rate_limit_per_minute: 1000,
+        server: yggr::core::config::ServerConfig {
+            base_url: "http://127.0.0.1:8080".to_string(),
+            ..Default::default()
+        },
+        data: yggr::core::config::DataConfig { dir: dir.clone() },
+        auth: yggr::core::config::AuthConfig {
+            login_rate_limit_per_minute: 1000,
+            ..Default::default()
+        },
+        seed: yggr::core::config::SeedConfig { file: None },
         ..Config::default()
     };
     let config = Arc::new(config);

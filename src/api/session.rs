@@ -133,7 +133,7 @@ pub async fn has_joined(
         return Ok(Err(StatusCode::NO_CONTENT));
     }
     // IP 校验(可选)
-    if state.config.check_ip
+    if state.config.auth.check_ip
         && let Some(expected) = &record.ip
         && let Some(actual) = &query.ip
         && actual != expected

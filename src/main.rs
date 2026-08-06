@@ -5,7 +5,7 @@ use rsa::{RsaPrivateKey, RsaPublicKey};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
@@ -47,30 +47,35 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    // 配置:第一个命令行参数为配置文件路径,默认 config.toml
-    let config_path = std::env::args()
-        .nth(1)
-        .unwrap_or_else(|| "config.toml".to_string());
-    let config = if Path::new(&config_path).exists() {
-        Config::load(Path::new(&config_path))?
+    // 配置目录:环境变量 YGGR_CONFIG_DIR 覆盖,默认 config
+    let config_dir = std::env::var("YGGR_CONFIG_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("config"));
+    let config_path = config_dir.join("config.toml");
+    let mut config = if Path::new(&config_path).exists() {
+        Config::load(&config_path)?
     } else {
-        warn!("config file {} not found, using defaults", config_path);
+        warn!(
+            "config file {} not found, using defaults",
+            config_path.display()
+        );
         Config::default()
     };
+    config.resolve_paths(&config_dir);
     let config = Arc::new(config);
 
     // 数据库
-    let db_path = config.data_dir.join("yggr.db");
+    let db_path = config.data.dir.join("yggr.db");
     let pool: SqlitePool = db::init_db(&db_path).await?;
 
     // RSA 密钥(自动生成)
-    let key_path = config.data_dir.join("private_key.pem");
+    let key_path = config.data.dir.join("private_key.pem");
     let (private_key, public_key): (RsaPrivateKey, RsaPublicKey) =
         crypto::load_or_generate_key(&key_path)?;
     info!("signing key ready: {}", key_path.display());
 
     // 材质存储
-    let store = TextureStore::new(&config.data_dir)?;
+    let store = TextureStore::new(&config.data.dir)?;
 
     // 内置默认皮肤(导入到材质存储)
     let default_skins = DefaultSkins::init(&store)?;
@@ -95,7 +100,7 @@ async fn main() -> Result<()> {
         private_key: Arc::new(private_key),
         public_key,
         sessions: Arc::new(Mutex::new(HashMap::new())),
-        limiter: Arc::new(RateLimiter::new(config.login_rate_limit_per_minute)),
+        limiter: Arc::new(RateLimiter::new(config.auth.login_rate_limit_per_minute)),
     };
 
     // 定期清理过期的 join 会话与令牌
@@ -129,10 +134,10 @@ async fn main() -> Result<()> {
 
     // HTTP 服务
     let app = build_app(state);
-    let listener = tokio::net::TcpListener::bind(&config.listen).await?;
+    let listener = tokio::net::TcpListener::bind(&config.server.listen).await?;
     info!(
         "yggr {} listening on {} (meta: {}/)",
-        config.implementation_version, config.listen, config.base_url
+        config.meta.implementation_version, config.server.listen, config.server.base_url
     );
     let token = shutdown.clone();
     axum::serve(

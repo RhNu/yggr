@@ -107,10 +107,10 @@ pub async fn create_player_handler(
     let count = count_players_by_user(&state.pool, &tok.user_id)
         .await
         .map_err(db_err)?;
-    if count >= state.config.max_players_per_user as i64 {
+    if count >= state.config.auth.max_players_per_user as i64 {
         return Err(ApiError::bad_request(format!(
             "Maximum {} players reached",
-            state.config.max_players_per_user
+            state.config.auth.max_players_per_user
         )));
     }
 
@@ -123,7 +123,7 @@ pub async fn create_player_handler(
         return Err(ApiError::bad_request("Player name already exists"));
     }
 
-    let player_id = match state.config.player_uuid_generation {
+    let player_id = match state.config.auth.player_uuid_generation {
         UuidGeneration::Offline => offline_uuid(name),
         UuidGeneration::Random => random_uuid(),
     };
