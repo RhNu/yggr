@@ -137,10 +137,10 @@ async fn upload_texture(
         return Err(ApiError::bad_request("Missing file field"));
     };
     // 规范:file 的 Content-Type 须为 image/png
-    if let Some(ct) = &content_type {
-        if ct != "image/png" {
-            return Err(ApiError::bad_request("File must be image/png"));
-        }
+    if let Some(ct) = &content_type
+        && ct != "image/png"
+    {
+        return Err(ApiError::bad_request("File must be image/png"));
     }
 
     // PNG 校验与清洗(防 PNG bomb、去除无关数据)
@@ -155,25 +155,25 @@ async fn upload_texture(
         .map_err(|e| ApiError::internal(e.to_string()))?;
 
     // 皮肤模型更新(slim/classic)
-    if kind == TextureKind::Skin {
-        if let Some(m) = &model {
-            let m = m.trim();
-            if !m.is_empty() && m != "slim" && m != "classic" {
-                return Err(ApiError::bad_request("Invalid model"));
-            }
-            if m == "slim" {
-                sqlx::query("UPDATE players SET skin_model = 'slim' WHERE id = ?")
-                    .bind(&player.id)
-                    .execute(&state.pool)
-                    .await
-                    .map_err(sqlx_err)?;
-            } else if m == "classic" {
-                sqlx::query("UPDATE players SET skin_model = 'classic' WHERE id = ?")
-                    .bind(&player.id)
-                    .execute(&state.pool)
-                    .await
-                    .map_err(sqlx_err)?;
-            }
+    if kind == TextureKind::Skin
+        && let Some(m) = &model
+    {
+        let m = m.trim();
+        if !m.is_empty() && m != "slim" && m != "classic" {
+            return Err(ApiError::bad_request("Invalid model"));
+        }
+        if m == "slim" {
+            sqlx::query("UPDATE players SET skin_model = 'slim' WHERE id = ?")
+                .bind(&player.id)
+                .execute(&state.pool)
+                .await
+                .map_err(sqlx_err)?;
+        } else if m == "classic" {
+            sqlx::query("UPDATE players SET skin_model = 'classic' WHERE id = ?")
+                .bind(&player.id)
+                .execute(&state.pool)
+                .await
+                .map_err(sqlx_err)?;
         }
     }
 

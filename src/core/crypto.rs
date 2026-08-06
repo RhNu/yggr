@@ -70,9 +70,8 @@ pub fn verify_sha1(key: &RsaPublicKey, data: &[u8], signature: &[u8]) -> bool {
 
 /// 公钥 PEM(用于 meta.signaturePublickey)
 pub fn public_key_pem(key: &RsaPublicKey) -> Result<String> {
-    Ok(key
-        .to_public_key_pem(LineEnding::LF)
-        .context("public key to PEM failed")?)
+    key.to_public_key_pem(LineEnding::LF)
+        .context("public key to PEM failed")
 }
 
 /// 计算 SHA-256 十六进制摘要(材质 hash)
@@ -144,7 +143,7 @@ pub fn millis_to_rfc3339(millis: i64) -> String {
             dt.format(&time::format_description::well_known::Rfc3339)
                 .ok()
         })
-        .unwrap_or_else(String::new)
+        .unwrap_or_default()
 }
 
 /// Base64 编码
@@ -154,7 +153,7 @@ pub fn b64_encode(data: &[u8]) -> String {
 
 /// Base64 解码
 pub fn b64_decode(data: &str) -> Result<Vec<u8>> {
-    Ok(BASE64.decode(data).context("invalid base64")?)
+    BASE64.decode(data).context("invalid base64")
 }
 
 #[cfg(test)]

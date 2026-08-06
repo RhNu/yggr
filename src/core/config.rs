@@ -5,19 +5,14 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 /// 角色 UUID 生成策略
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum UuidGeneration {
     /// 离线兼容:MD5("OfflinePlayer:" + name),可与离线服平滑迁移
+    #[default]
     Offline,
     /// 随机 UUID v4
     Random,
-}
-
-impl Default for UuidGeneration {
-    fn default() -> Self {
-        UuidGeneration::Offline
-    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -84,10 +79,10 @@ impl Config {
     /// 从 base_url 推导材质域名白名单
     pub fn texture_domains(&self) -> Vec<String> {
         let mut domains: Vec<String> = Vec::new();
-        if let Ok(url) = url::Url::parse(&self.base_url) {
-            if let Some(host) = url.host_str() {
-                domains.push(format!(".{}", host));
-            }
+        if let Ok(url) = url::Url::parse(&self.base_url)
+            && let Some(host) = url.host_str()
+        {
+            domains.push(format!(".{}", host));
         }
         for d in &self.skin_domains {
             if !domains.contains(d) {
@@ -104,9 +99,11 @@ mod tests {
 
     #[test]
     fn test_texture_domains() {
-        let mut cfg = Config::default();
-        cfg.base_url = "https://ygg.example.com:8443/path".to_string();
-        cfg.skin_domains = vec!["example.org".to_string()];
+        let cfg = Config {
+            base_url: "https://ygg.example.com:8443/path".to_string(),
+            skin_domains: vec!["example.org".to_string()],
+            ..Default::default()
+        };
         let domains = cfg.texture_domains();
         assert!(domains.contains(&".ygg.example.com".to_string()));
         assert!(domains.contains(&"example.org".to_string()));

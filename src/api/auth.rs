@@ -34,12 +34,11 @@ fn token_valid(tok: &Token) -> bool {
 
 /// 从请求提取客户端 IP(优先 X-Forwarded-For,用于反代场景)
 pub fn client_ip(headers: &HeaderMap, addr: SocketAddr) -> IpAddr {
-    if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
-        if let Some(first) = xff.split(',').next() {
-            if let Ok(ip) = first.trim().parse() {
-                return ip;
-            }
-        }
+    if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok())
+        && let Some(first) = xff.split(',').next()
+        && let Ok(ip) = first.trim().parse()
+    {
+        return ip;
     }
     addr.ip()
 }
@@ -234,10 +233,10 @@ pub async fn refresh(
     if !token_valid(&tok) {
         return Err(ApiError::invalid_token());
     }
-    if let Some(ct) = &req.client_token {
-        if &tok.client_token != ct {
-            return Err(ApiError::invalid_token());
-        }
+    if let Some(ct) = &req.client_token
+        && &tok.client_token != ct
+    {
+        return Err(ApiError::invalid_token());
     }
 
     // 角色选择
@@ -249,7 +248,7 @@ pub async fn refresh(
         if tok.player_id.is_some() {
             return Err(ApiError::profile_already_assigned());
         }
-        if !players.iter().any(|p| &p.id == &sel.id) {
+        if !players.iter().any(|p| p.id == sel.id) {
             return Err(ApiError::invalid_profile_selection());
         }
         new_player_id = Some(sel.id.clone());
@@ -316,10 +315,10 @@ pub async fn validate(
     if !token_valid(&tok) {
         return Err(ApiError::invalid_token());
     }
-    if let Some(ct) = &req.client_token {
-        if &tok.client_token != ct {
-            return Err(ApiError::invalid_token());
-        }
+    if let Some(ct) = &req.client_token
+        && &tok.client_token != ct
+    {
+        return Err(ApiError::invalid_token());
     }
     Ok(StatusCode::NO_CONTENT)
 }

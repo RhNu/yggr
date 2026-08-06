@@ -71,7 +71,7 @@ fn validate_dimensions(w: u32, h: u32, kind: TextureKind) -> Result<()> {
     match kind {
         // 皮肤:64x32 的整数倍或 64x64 的整数倍
         TextureKind::Skin => {
-            if w % 64 != 0 {
+            if !w.is_multiple_of(64) {
                 anyhow::bail!("invalid skin width: {}", w);
             }
             let a = w / 64;
@@ -81,11 +81,11 @@ fn validate_dimensions(w: u32, h: u32, kind: TextureKind) -> Result<()> {
         }
         // 披风:64x32 的整数倍或 22x17 的整数倍
         TextureKind::Cape => {
-            let ok_standard = w % 64 == 0 && {
+            let ok_standard = w.is_multiple_of(64) && {
                 let a = w / 64;
                 h == 32 * a
             };
-            let ok_legacy = w % 22 == 0 && {
+            let ok_legacy = w.is_multiple_of(22) && {
                 let a = w / 22;
                 h == 17 * a
             };

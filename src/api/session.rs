@@ -134,14 +134,12 @@ pub async fn has_joined(
         return Ok(Err(StatusCode::NO_CONTENT));
     }
     // IP 校验(可选)
-    if state.config.check_ip {
-        if let Some(expected) = &record.ip {
-            if let Some(actual) = &query.ip {
-                if actual != expected {
-                    return Ok(Err(StatusCode::NO_CONTENT));
-                }
-            }
-        }
+    if state.config.check_ip
+        && let Some(expected) = &record.ip
+        && let Some(actual) = &query.ip
+        && actual != expected
+    {
+        return Ok(Err(StatusCode::NO_CONTENT));
     }
 
     let player = get_player_by_id(&state.pool, &record.player_id)

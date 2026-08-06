@@ -42,11 +42,11 @@ CREATE INDEX IF NOT EXISTS idx_tokens_player ON tokens(player_id);
 
 /// 打开(必要时创建)SQLite 数据库并初始化表结构
 pub async fn init_db(path: &Path) -> Result<SqlitePool> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("failed to create dir: {}", parent.display()))?;
-        }
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create dir: {}", parent.display()))?;
     }
     let options = SqliteConnectOptions::new()
         .filename(path)
