@@ -18,12 +18,12 @@ yggr 是一个用 Rust 编写的轻量级 Yggdrasil 认证服务端,目标为自
 | --------- | -------------------------------------------------------------------------------------------------- |
 | 认证 API  | `authenticate` / `refresh` / `validate` / `invalidate` / `signout`,支持邮箱与角色名登录            |
 | 会话 API  | `join` / `hasJoined`,内存会话、30 秒过期、一次性防重放                                             |
-| 角色 API  | `profile/{uuid}`(SHA1withRSA 签名 `textures`)、`POST /api/profiles/minecraft` 批量查询             |
+| 角色 API  | `profile/{uuid}`(SHA1withRSA 签名 `textures`)、`POST /service/api/profiles/minecraft` 批量查询     |
 | 材质系统  | 皮肤/披风上传与清除,PNG 安全校验(防 PNG bomb、去元数据重编码、22x17 披风补足),SHA-256 内容寻址存储 |
-| 元数据    | `GET /` 返回 meta + skinDomains + signaturePublickey,含 ALI 头                                     |
-| 消息签名  | `POST /minecraftservices/player/certificates`(Minecraft 1.19+,V1/V2 签名)                          |
+| 元数据    | `GET /service` 返回 meta + skinDomains + signaturePublickey,含 ALI 头;根路径 `/` 返回 ALI 头       |
+| 消息签名  | `POST /service/minecraftservices/player/certificates`(Minecraft 1.19+,V1/V2 签名)                  |
 | 角色 UUID | 离线兼容 `MD5("OfflinePlayer:"+name)` 或随机 v4,亦可 seed 中手动指定                               |
-| 安全      | 登录限流、argon2id 密码哈希、RSA-2048 自动生成密钥                                                 |
+| 安全      | 登录限流、argon2id 密码哈希、RSA-4096 自动生成密钥、可选暂时失效令牌                               |
 
 ---
 
@@ -109,14 +109,15 @@ yggr 是一个用 Rust 编写的轻量级 Yggdrasil 认证服务端,目标为自
 ```mermaid
 stateDiagram-v2
     [*] --> 有效: 登录/刷新颁发
-    有效 --> 暂时失效: 角色改名(可选,未实现)
+    有效 --> 暂时失效: 超过 token_active_window_days(可选)
     有效 --> 无效: 吊销/登出/刷新/过期
     暂时失效 --> 无效: 吊销/过期
     有效 --> 有效: 刷新(旧令牌吊销,颁发新令牌)
+    暂时失效 --> 有效: 刷新(旧令牌吊销,颁发新令牌)
 ```
 
 - 状态不可逆;刷新只颁发新令牌,不能复活旧令牌。
-- **暂时失效状态**(角色改名触发)规范明确非必须,yggr 未实现,行为等价于"无暂时失效"(启动器逻辑仍正常)。
+- **暂时失效状态**:通过 `token_active_window_days` 配置(默认 = `token_ttl_days`,即不启用)。小于 `token_ttl_days` 时启用:令牌颁发后超过 active window 但未过期为暂时失效,仅可刷新;`validate`/`join`/`bearer_token` 拒绝暂时失效令牌。
 - **令牌数量上限**:每用户最多 10 个(`api/auth.rs::MAX_TOKENS_PER_USER`),颁发后超限自动按颁发时间吊销最旧的;过期令牌由启动时与后台任务(每 60 秒)定期清理。
 
 ### 2.4 角色 UUID 生成
@@ -148,7 +149,7 @@ src/
 │   ├── mod.rs           聚合导出(config/crypto/db/error/types)
 │   ├── config.rs        配置解析(TOML)与默认值;材质域名白名单推导
 │   ├── crypto.rs        RSA 密钥生成与加载、SHA1withRSA 签名、argon2id、离线 UUID、随机令牌
-│   ├── error.rs         ApiError(统一错误格式)→ IntoResponse
+│   ├── error.rs         ApiError(统一错误格式)-> IntoResponse
 │   ├── types.rs         公共序列化类型(JsonResponse / Property / ProfileResponse / UserResponse)
 │   └── db/              SQLite 数据层
 │       ├── mod.rs       聚合导出(models/queries)
@@ -163,23 +164,24 @@ src/
 │       ├── store.rs     内容寻址存储 data/textures/{sha256}.png
 │       ├── process.rs   PNG 安全校验(sanitize/pad)
 │       └── payload.rs   textures 属性构造与签名
-└── api/                 HTTP 处理器层(全部规范路径直接挂根)
-    ├── mod.rs           build_app 路由组装 + 聚合导出各端点
-    ├── auth.rs          /authserver/* 五个认证端点 + Bearer 令牌解析
-    ├── session.rs       /sessionserver/*:join / hasJoined / profile 查询
-    ├── profiles.rs      /api/profiles/minecraft 批量查询 + 材质上传/清除 + 材质文件服务
-    ├── certificates.rs  /minecraftservices/player/certificates(1.19+ 消息签名密钥)
-    └── meta.rs          GET / 元数据 + ALI 头
+└── api/                 HTTP 处理器层(全部规范路径挂载于 /service 下)
+    ├── mod.rs           build_app 路由组装 + 根路径 ALI + 聚合导出
+    ├── auth.rs          /service/authserver/* 五个认证端点 + Bearer 令牌解析 + TokenStatus
+    ├── session.rs       /service/sessionserver/*:join / hasJoined / profile 查询
+    ├── profiles.rs      /service/api/profiles/minecraft 批量查询 + 材质上传/清除 + 材质文件 + 旧式皮肤 API
+    ├── certificates.rs  /service/minecraftservices/player/certificates(1.19+ 消息签名密钥)
+    └── meta.rs          GET /service 元数据 + ALI 头
 ```
 
 ```mermaid
 flowchart LR
     subgraph HTTP[axum Router]
-        M[api/meta.rs GET /]
-        A[api/auth.rs /authserver/*]
-        S[api/session.rs /sessionserver/*]
-        P[api/profiles.rs /api/* + /textures/*]
-        C[api/certificates.rs /minecraftservices/*]
+        R[api/mod.rs GET / ALI]
+        M[api/meta.rs GET /service]
+        A[api/auth.rs /service/authserver/*]
+        S[api/session.rs /service/sessionserver/*]
+        P[api/profiles.rs /service/api/* + /service/textures/*]
+        C[api/certificates.rs /service/minecraftservices/*]
     end
     A --> E[core/error.rs 统一错误]
     S --> E
@@ -241,31 +243,34 @@ data/
 
 ## 5. API 端点全景
 
-> 以下所有路径直接挂在服务根。`{uuid}`、`{hash}` 均为无符号 UUID / hex 字符串。
+> 所有 Yggdrasil 规范端点挂载在 `/service` 下。根路径 `/` 返回 ALI 头(指向 `/service`),留给管理 API 与前端。
+> `{uuid}`、`{hash}` 均为无符号 UUID / hex 字符串。
 > 错误响应格式统一见 §2.1。
 
-| 方法   | 路径                                              | 模块             | 认证   | 说明                                               |
-| ------ | ------------------------------------------------- | ---------------- | ------ | -------------------------------------------------- |
-| GET    | `/`                                               | api/meta         | 无     | 元数据 + skinDomains + signaturePublickey + ALI 头 |
-| POST   | `/authserver/authenticate`                        | api/auth         | 无     | 登录                                               |
-| POST   | `/authserver/refresh`                             | api/auth         | 无     | 刷新令牌(原令牌吊销)                               |
-| POST   | `/authserver/validate`                            | api/auth         | 无     | 验证令牌(有效 → 204)                               |
-| POST   | `/authserver/invalidate`                          | api/auth         | 无     | 吊销令牌(恒 204)                                   |
-| POST   | `/authserver/signout`                             | api/auth         | 无     | 登出,吊销该用户全部令牌(204)                       |
-| POST   | `/sessionserver/session/minecraft/join`           | api/session      | 无     | 客户端进服登记(204)                                |
-| GET    | `/sessionserver/session/minecraft/hasJoined`      | api/session      | 无     | 服务端验客户端(失败 → 204)                         |
-| GET    | `/sessionserver/session/minecraft/profile/{uuid}` | api/session      | 无     | 角色属性查询(`unsigned` 参数)                      |
-| POST   | `/api/profiles/minecraft`                         | api/profiles     | 无     | 按名称批量查询(≤100)                               |
-| PUT    | `/api/user/profile/{uuid}/skin`                   | api/profiles     | Bearer | 上传皮肤                                           |
-| DELETE | `/api/user/profile/{uuid}/skin`                   | api/profiles     | Bearer | 清除皮肤                                           |
-| PUT    | `/api/user/profile/{uuid}/cape`                   | api/profiles     | Bearer | 上传披风                                           |
-| DELETE | `/api/user/profile/{uuid}/cape`                   | api/profiles     | Bearer | 清除披风                                           |
-| GET    | `/textures/{hash}`                                | api/profiles     | 无     | 材质文件(`image/png`)                              |
-| POST   | `/minecraftservices/player/certificates`          | api/certificates | Bearer | 1.19+ 消息签名密钥对                               |
+| 方法   | 路径                                                              | 模块             | 认证   | 说明                                               |
+| ------ | ----------------------------------------------------------------- | ---------------- | ------ | -------------------------------------------------- |
+| GET    | `/`                                                               | api/mod          | 无     | 空 200 + ALI 头(指向 `/service`)                   |
+| GET    | `/service`                                                        | api/meta         | 无     | 元数据 + skinDomains + signaturePublickey + ALI 头 |
+| POST   | `/service/authserver/authenticate`                                | api/auth         | 无     | 登录                                               |
+| POST   | `/service/authserver/refresh`                                     | api/auth         | 无     | 刷新令牌(原令牌吊销)                               |
+| POST   | `/service/authserver/validate`                                    | api/auth         | 无     | 验证令牌(有效 -> 204)                              |
+| POST   | `/service/authserver/invalidate`                                  | api/auth         | 无     | 吊销令牌(恒 204)                                   |
+| POST   | `/service/authserver/signout`                                     | api/auth         | 无     | 登出,吊销该用户全部令牌(204)                       |
+| POST   | `/service/sessionserver/session/minecraft/join`                   | api/session      | 无     | 客户端进服登记(204)                                |
+| GET    | `/service/sessionserver/session/minecraft/hasJoined`              | api/session      | 无     | 服务端验客户端(失败 -> 204)                        |
+| GET    | `/service/service/sessionserver/session/minecraft/profile/{uuid}` | api/session      | 无     | 角色属性查询(`unsigned` 参数)                      |
+| POST   | `/service/api/profiles/minecraft`                                 | api/profiles     | 无     | 按名称批量查询(≤100)                               |
+| PUT    | `/service/api/user/profile/{uuid}/skin`                           | api/profiles     | Bearer | 上传皮肤                                           |
+| DELETE | `/service/api/user/profile/{uuid}/skin`                           | api/profiles     | Bearer | 清除皮肤                                           |
+| PUT    | `/service/api/user/profile/{uuid}/cape`                           | api/profiles     | Bearer | 上传披风                                           |
+| DELETE | `/service/api/user/profile/{uuid}/cape`                           | api/profiles     | Bearer | 清除披风                                           |
+| GET    | `/service/textures/{hash}`                                        | api/profiles     | 无     | 材质文件(`image/png`)                              |
+| GET    | `/service/skins/MinecraftSkins/{username}`                        | api/profiles     | 无     | 旧式皮肤 API(`legacy_skin_api=true` 时生效)        |
+| POST   | `/service/minecraftservices/player/certificates`                  | api/certificates | Bearer | 1.19+ 消息签名密钥对                               |
 
-### 5.1 元数据 — `GET /`
+### 5.1 元数据 - `GET /`
 
-响应(含 `X-Authlib-Injector-API-Location: /` 头):
+响应(含 `X-Authlib-Injector-API-Location: /service` 头):
 
 ```json
 {
@@ -290,7 +295,7 @@ data/
 
 ### 5.2 认证 API
 
-#### POST `/authserver/authenticate`
+#### POST `/service/authserver/authenticate`
 
 请求:
 
@@ -325,7 +330,7 @@ data/
 
 错误:密码错误/限流 → `403 ForbiddenOperationException / Invalid credentials. Invalid username or password.`
 
-#### POST `/authserver/refresh`
+#### POST `/service/authserver/refresh`
 
 请求:
 
@@ -348,15 +353,15 @@ data/
 
 刷新过程:先颁发新令牌,成功后再吊销原令牌(失败时原令牌保持有效);随后执行令牌数量上限清理。
 
-#### POST `/authserver/validate`
+#### POST `/service/authserver/validate`
 
 请求 `{ "accessToken", "clientToken"(可选,提供则校验) }`。有效 → `204 No Content`;无效 → 403(如上)。
 
-#### POST `/authserver/invalidate`
+#### POST `/service/authserver/invalidate`
 
 请求同上。只检查 `accessToken`,忽略 clientToken 值;**无论成功与否恒返回 204**。
 
-#### POST `/authserver/signout`
+#### POST `/service/authserver/signout`
 
 请求 `{ "username", "password" }`。验密通过后吊销该用户全部令牌 → 204。受与 authenticate 相同的限流保护(防密码探测)。
 
@@ -371,13 +376,13 @@ sequenceDiagram
     participant SRV as Minecraft 服务端
 
     MC->>MC: 生成随机 serverId
-    MC->>YG: POST /sessionserver/session/minecraft/join<br/>{accessToken, selectedProfile, serverId}
+    MC->>YG: POST /service/sessionserver/session/minecraft/join<br/>{accessToken, selectedProfile, serverId}
     YG-->>MC: 204(记录 serverId→角色,30 秒有效)
     SRV->>YG: GET hasJoined?username=&serverId=&ip=
     YG-->>SRV: 204(失败) / 角色完整信息含签名 textures(成功)
 ```
 
-#### POST `/sessionserver/session/minecraft/join`
+#### POST `/service/sessionserver/session/minecraft/join`
 
 请求 `{ "accessToken", "selectedProfile", "serverId" }`。
 
@@ -386,14 +391,14 @@ sequenceDiagram
 - 会话存于内存 `HashMap`(`state.sessions`),30 秒过期,后台任务每 60 秒清理。
 - `serverId` 随机性强,作为主键;记录包含客户端 IP 供 hasJoined 校验。
 
-#### GET `/sessionserver/session/minecraft/hasJoined?username=&serverId=&ip=`
+#### GET `/service/sessionserver/session/minecraft/hasJoined?username=&serverId=&ip=`
 
 校验顺序:记录存在 → 未过期 → `username` 与记录角色名一致 → (`check_ip=true` 且请求含 `ip` 时)IP 一致。
 
 - **一次性消费**:无论成功失败即删除记录,防重放。
 - 成功 → 200,返回角色完整信息(**含签名 textures 属性**);失败 → `204 No Content`。
 
-#### GET `/sessionserver/session/minecraft/profile/{uuid}?unsigned=`
+#### GET `/service/sessionserver/session/minecraft/profile/{uuid}?unsigned=`
 
 - `unsigned` 默认 `true`:响应不含签名;`unsigned=false` 时 `textures` 属性附带 `signature`。
 - 角色不存在 → 204。
@@ -401,17 +406,17 @@ sequenceDiagram
 
 ### 5.4 角色 API
 
-#### POST `/api/profiles/minecraft`
+#### POST `/service/api/profiles/minecraft`
 
 请求 `["角色名", ...]`(≤100,空数组返回空)。响应为命中角色数组,**不含 properties**、次序无要求、不存在的角色跳过。超限 → `400 IllegalArgumentException`。
 
 ### 5.5 材质上传/清除
 
 ```
-PUT    /api/user/profile/{uuid}/skin
-DELETE /api/user/profile/{uuid}/skin
-PUT    /api/user/profile/{uuid}/cape
-DELETE /api/user/profile/{uuid}/cape
+PUT    /service/api/user/profile/{uuid}/skin
+DELETE /service/api/user/profile/{uuid}/skin
+PUT    /service/api/user/profile/{uuid}/cape
+DELETE /service/api/user/profile/{uuid}/cape
 ```
 
 认证:`Authorization: Bearer {accessToken}`;缺失或无效 → `401`。角色不存在或不属于令牌用户 → `404 Unknown profile`。成功 → `204`。
@@ -453,13 +458,13 @@ flowchart TD
 | 皮肤 | 64x32 的整数倍 或 64x64 的整数倍(宽高缩放系数一致)            |
 | 披风 | 64x32 的整数倍 或 22x17 的整数倍(22x17 必须补足到 64x32 倍数) |
 
-### 5.6 材质文件 — `GET /textures/{hash}`
+### 5.6 材质文件 — `GET /service/textures/{hash}`
 
 - 内容寻址:文件名即 SHA-256 hash(Minecraft 缓存依赖此约定,hash 由服务端计算)。
 - 响应头 `Content-Type: image/png`(必须,防 MIME Sniffing);不存在 → 404。
-- 材质 URL 由 `base_url` 拼装:`{base_url}/textures/{hash}`,并写入 textures 属性。
+- 材质 URL 由 `base_url` 拼装:`{base_url}/service/textures/{hash}`,并写入 textures 属性。
 
-### 5.7 消息签名密钥 — `POST /minecraftservices/player/certificates`
+### 5.7 消息签名密钥 — `POST /service/minecraftservices/player/certificates`
 
 Minecraft 1.19+ 聊天消息签名(由 `feature.enable_profile_key: true` 开启)。
 
@@ -528,10 +533,10 @@ sequenceDiagram
     participant C as 启动器
     participant Y as yggr
     C->>Y: GET /(meta + 公钥)
-    C->>Y: POST /authserver/authenticate
+    C->>Y: POST /service/authserver/authenticate
     Y->>Y: 限流 → 查用户 → 验密 → 定角色
     Y-->>C: accessToken + clientToken + profiles
-    C->>Y: POST /authserver/refresh(角色选择, 多角色时)
+    C->>Y: POST /service/authserver/refresh(角色选择, 多角色时)
     Y-->>C: 新 accessToken
 ```
 
@@ -541,46 +546,53 @@ sequenceDiagram
 sequenceDiagram
     participant C as 启动器
     participant Y as yggr
-    C->>Y: PUT /api/user/profile/{uuid}/skin (Bearer + multipart)
+    C->>Y: PUT /service/api/user/profile/{uuid}/skin (Bearer + multipart)
     Y->>Y: 验令牌 → 验归属 → PNG 清洗 → 存储
     Y-->>C: 204
-    C->>Y: GET /sessionserver/session/minecraft/profile/{uuid}?unsigned=false
-    Y-->>C: textures 属性(签名) → URL → GET /textures/{hash}
+    C->>Y: GET /service/sessionserver/session/minecraft/profile/{uuid}?unsigned=false
+    Y-->>C: textures 属性(签名) → URL → GET /service/textures/{hash}
 ```
 
 ---
 
 ## 8. 配置参考
 
-| 配置项                        | 默认                    | 说明                             |
-| ----------------------------- | ----------------------- | -------------------------------- |
-| `server_name`                 | `My Yggdrasil`          | meta.serverName                  |
-| `base_url`                    | `http://127.0.0.1:8080` | 材质 URL 基准 + skinDomains 推导 |
-| `listen`                      | `0.0.0.0:8080`          | 监听地址                         |
-| `data_dir`                    | `data`                  | 数据库/密钥/材质目录             |
-| `player_uuid_generation`      | `offline`               | `offline`/`random`               |
-| `token_ttl_days`              | `15`                    | 令牌有效期                       |
-| `non_email_login`             | `true`                  | 角色名登录 + meta feature        |
-| `skin_domains`                | `[]`                    | 追加白名单规则                   |
-| `check_ip`                    | `false`                 | hasJoined IP 校验                |
-| `login_rate_limit_per_minute` | `10`                    | 每 IP 限流,0 禁用                |
-| `seed_file`                   | `seed.toml`             | 种子配置,`None`/空禁用           |
-| `implementation_name/version` | `yggr` / 包版本         | meta 信息                        |
+| 配置项                        | 默认                    | 说明                               |
+| ----------------------------- | ----------------------- | ---------------------------------- |
+| `server_name`                 | `My Yggdrasil`          | meta.serverName                    |
+| `base_url`                    | `http://127.0.0.1:8080` | 材质 URL 基准 + skinDomains 推导   |
+| `listen`                      | `0.0.0.0:8080`          | 监听地址                           |
+| `data_dir`                    | `data`                  | 数据库/密钥/材质目录               |
+| `player_uuid_generation`      | `offline`               | `offline`/`random`                 |
+| `token_ttl_days`              | `15`                    | 令牌有效期                         |
+| `token_active_window_days`    | `15`                    | 令牌有效窗口;小于 ttl 启用暂时失效 |
+| `non_email_login`             | `true`                  | 角色名登录 + meta feature          |
+| `skin_domains`                | `[]`                    | 追加白名单规则                     |
+| `check_ip`                    | `false`                 | hasJoined IP 校验                  |
+| `login_rate_limit_per_minute` | `10`                    | 每 IP 限流,0 禁用                  |
+| `seed_file`                   | `seed.toml`             | 种子配置,`None`/空禁用             |
+| `implementation_name/version` | `yggr` / 包版本         | meta 信息                          |
+| `legacy_skin_api`             | `false`                 | 旧式皮肤 API 服务端处理            |
+| `no_mojang_namespace`         | `false`                 | 禁用 @mojang 命名空间              |
+| `enable_mojang_anti_features` | `false`                 | 开启 Minecraft anti-features       |
+| `username_check`              | `false`                 | 启用用户名验证                     |
+| `register_url`                | `None`                  | 注册页面地址(meta.links.register)  |
 
 ---
 
 ## 9. 规范符合性总览
 
-| 规范章节                              | 状态                      |
-| ------------------------------------- | ------------------------- |
-| 基本约定(编码/JSON/错误格式/数据格式) | ✅ 符合                   |
-| 模型:用户/角色/令牌                   | ✅ 符合(细节偏差见核对表) |
-| 认证 API(5 端点)                      | ✅ 符合                   |
-| 会话 API(join/hasJoined/profile)      | ✅ 符合                   |
-| 角色 API(批量查询)                    | ✅ 符合                   |
-| 材质上传(含 PNG 安全)                 | ✅ 符合                   |
-| 元数据 + ALI                          | ✅ 符合                   |
-| 签名密钥对                            | ✅ 符合(RSA-4096)         |
-| certificates(profile key 扩展)        | ✅ 符合                   |
+| 规范章节                              | 状态                 |
+| ------------------------------------- | -------------------- |
+| 基本约定(编码/JSON/错误格式/数据格式) | 符合                 |
+| 模型:用户/角色/令牌                   | 符合(含暂时失效状态) |
+| 认证 API(5 端点)                      | 符合                 |
+| 会话 API(join/hasJoined/profile)      | 符合                 |
+| 角色 API(批量查询)                    | 符合                 |
+| 材质上传(含 PNG 安全)                 | 符合                 |
+| 元数据 + ALI                          | 符合                 |
+| 签名密钥对                            | 符合(RSA-4096)       |
+| certificates(profile key 扩展)        | 符合                 |
+| 可选 feature 选项                     | 符合(全部可配置)     |
 
-全部规范项已符合,修复记录见 [`spec-compliance.md`](spec-compliance.md)。
+全部规范项已符合,逐条核对见 [`spec-compliance.md`](spec-compliance.md)。

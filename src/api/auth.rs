@@ -1,9 +1,9 @@
 //! /authserver/* 认证 API:
-//! - POST /authserver/authenticate 登录
-//! - POST /authserver/refresh 刷新令牌
-//! - POST /authserver/validate 验证令牌
-//! - POST /authserver/invalidate 吊销令牌
-//! - POST /authserver/signout 登出
+//! - POST /service/authserver/authenticate 登录
+//! - POST /service/authserver/refresh 刷新令牌
+//! - POST /service/authserver/validate 验证令牌
+//! - POST /service/authserver/invalidate 吊销令牌
+//! - POST /service/authserver/signout 登出
 
 use axum::extract::{ConnectInfo, Json, State};
 use axum::http::{HeaderMap, StatusCode, header};
@@ -27,9 +27,35 @@ fn db_err(e: anyhow::Error) -> ApiError {
     ApiError::internal(e.to_string())
 }
 
-/// 令牌是否在有效期内
-fn token_valid(tok: &Token) -> bool {
-    tok.expires_at > now_millis()
+/// 令牌状态
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenStatus {
+    /// 有效:可进行所有操作
+    Valid,
+    /// 暂时失效:仅可刷新(token_active_window 超时但未过期)
+    TemporarilyInvalid,
+    /// 无效:已过期
+    Invalid,
+}
+
+/// 判定令牌状态(根据配置的 active window)
+pub fn token_status(tok: &Token, config: &crate::core::config::Config) -> TokenStatus {
+    let now = now_millis();
+    if tok.expires_at <= now {
+        return TokenStatus::Invalid;
+    }
+    if config.temp_invalidation_enabled() {
+        let active_ms = config.token_active_window_days * 24 * 3600 * 1000;
+        if tok.issued_at + active_ms <= now {
+            return TokenStatus::TemporarilyInvalid;
+        }
+    }
+    TokenStatus::Valid
+}
+
+/// 令牌是否完全有效(非暂时失效、非过期)
+fn token_valid(tok: &Token, config: &crate::core::config::Config) -> bool {
+    token_status(tok, config) == TokenStatus::Valid
 }
 
 /// 从请求提取客户端 IP(优先 X-Forwarded-For,用于反代场景)
@@ -127,7 +153,7 @@ pub struct SignoutRequest {
 
 // ---- Handlers ----
 
-/// POST /authserver/authenticate
+/// POST /service/authserver/authenticate
 pub async fn authenticate(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -219,7 +245,7 @@ pub async fn authenticate(
     }))
 }
 
-/// POST /authserver/refresh
+/// POST /service/authserver/refresh
 pub async fn refresh(
     State(state): State<AppState>,
     Json(req): Json<RefreshRequest>,
@@ -230,7 +256,9 @@ pub async fn refresh(
         .await
         .map_err(db_err)?
         .ok_or_else(ApiError::invalid_token)?;
-    if !token_valid(&tok) {
+    // refresh 接受有效与暂时失效的令牌
+    let status = token_status(&tok, &state.config);
+    if status == TokenStatus::Invalid {
         return Err(ApiError::invalid_token());
     }
     if let Some(ct) = &req.client_token
@@ -303,7 +331,7 @@ pub async fn refresh(
     }))
 }
 
-/// POST /authserver/validate;有效返回 204
+/// POST /service/authserver/validate;有效返回 204
 pub async fn validate(
     State(state): State<AppState>,
     Json(req): Json<ValidateRequest>,
@@ -312,7 +340,7 @@ pub async fn validate(
         .await
         .map_err(db_err)?
         .ok_or_else(ApiError::invalid_token)?;
-    if !token_valid(&tok) {
+    if !token_valid(&tok, &state.config) {
         return Err(ApiError::invalid_token());
     }
     if let Some(ct) = &req.client_token
@@ -323,7 +351,7 @@ pub async fn validate(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// POST /authserver/invalidate;无论结果如何返回 204
+/// POST /service/authserver/invalidate;无论结果如何返回 204
 pub async fn invalidate(
     State(state): State<AppState>,
     Json(req): Json<InvalidateRequest>,
@@ -339,7 +367,7 @@ pub async fn invalidate(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// POST /authserver/signout;吊销用户所有令牌
+/// POST /service/authserver/signout;吊销用户所有令牌
 pub async fn signout(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -379,7 +407,7 @@ pub async fn bearer_token(state: &AppState, headers: &HeaderMap) -> Result<Token
         .await
         .map_err(db_err)?
         .ok_or_else(ApiError::unauthorized)?;
-    if !token_valid(&tok) {
+    if !token_valid(&tok, &state.config) {
         return Err(ApiError::unauthorized());
     }
     Ok(tok)

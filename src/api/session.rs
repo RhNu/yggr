@@ -1,7 +1,7 @@
 //! /sessionserver/* 会话 API:
-//! - POST /sessionserver/session/minecraft/join 客户端进入服务器
-//! - GET /sessionserver/session/minecraft/hasJoined 服务端验证客户端
-//! - GET /sessionserver/session/minecraft/profile/{uuid} 查询角色属性
+//! - POST /service/sessionserver/session/minecraft/join 客户端进入服务器
+//! - GET /service/sessionserver/session/minecraft/hasJoined 服务端验证客户端
+//! - GET /service/sessionserver/session/minecraft/profile/{uuid} 查询角色属性
 
 use axum::Json;
 use axum::extract::{ConnectInfo, Path, Query, State};
@@ -63,7 +63,7 @@ pub struct JoinRequest {
     pub server_id: String,
 }
 
-/// POST /sessionserver/session/minecraft/join
+/// POST /service/sessionserver/session/minecraft/join
 pub async fn join(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -74,7 +74,7 @@ pub async fn join(
         .await
         .map_err(db_err)?
         .ok_or_else(ApiError::invalid_token)?;
-    if tok.expires_at <= now_millis() {
+    if crate::api::auth::token_status(&tok, &state.config) != crate::api::auth::TokenStatus::Valid {
         return Err(ApiError::invalid_token());
     }
     // selectedProfile 必须与令牌绑定的角色一致
@@ -110,7 +110,7 @@ pub struct HasJoinedQuery {
     pub ip: Option<String>,
 }
 
-/// GET /sessionserver/session/minecraft/hasJoined
+/// GET /service/sessionserver/session/minecraft/hasJoined
 pub async fn has_joined(
     State(state): State<AppState>,
     Query(query): Query<HasJoinedQuery>,
@@ -157,7 +157,7 @@ pub struct ProfileQuery {
     pub unsigned: Option<String>,
 }
 
-/// GET /sessionserver/session/minecraft/profile/{uuid}
+/// GET /service/sessionserver/session/minecraft/profile/{uuid}
 pub async fn profile(
     State(state): State<AppState>,
     Path(uuid): Path<String>,

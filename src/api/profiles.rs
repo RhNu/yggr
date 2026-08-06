@@ -1,6 +1,8 @@
 //! /api/* 角色 API:
 //! - POST /api/profiles/minecraft 按名称批量查询角色
 //! - PUT/DELETE /api/user/profile/{uuid}/{skin|cape} 材质上传/清除
+//! - GET /service/textures/{hash} 材质文件服务
+//! - GET /service/skins/MinecraftSkins/{username} 旧式皮肤 API(legacy_skin_api=true)
 
 use axum::Json;
 use axum::extract::{Multipart, Path, State};
@@ -10,7 +12,9 @@ use axum::response::IntoResponse;
 use crate::api::auth::bearer_token;
 use crate::app::state::AppState;
 use crate::app::textures::{pad_cape, sanitize_png};
-use crate::core::db::{TextureKind, get_player_by_id, get_players_by_names, update_player_texture};
+use crate::core::db::{
+    TextureKind, get_player_by_id, get_player_by_name, get_players_by_names, update_player_texture,
+};
 use crate::core::error::{ApiError, ApiResult};
 use crate::core::types::{JsonResponse, ProfileResponse};
 
@@ -29,7 +33,7 @@ fn internal(e: anyhow::Error) -> ApiError {
     ApiError::internal(e.to_string())
 }
 
-/// POST /api/profiles/minecraft
+/// POST /service/api/profiles/minecraft
 pub async fn batch_profiles(
     State(state): State<AppState>,
     Json(names): Json<Vec<String>>,
@@ -65,7 +69,7 @@ pub async fn require_bearer(
     Ok(next.run(req).await)
 }
 
-/// PUT /api/user/profile/{uuid}/skin
+/// PUT /service/api/user/profile/{uuid}/skin
 pub async fn upload_skin(
     state: State<AppState>,
     headers: HeaderMap,
@@ -75,7 +79,7 @@ pub async fn upload_skin(
     upload_texture(state, headers, path, TextureKind::Skin, multipart).await
 }
 
-/// PUT /api/user/profile/{uuid}/cape
+/// PUT /service/api/user/profile/{uuid}/cape
 pub async fn upload_cape(
     state: State<AppState>,
     headers: HeaderMap,
@@ -85,7 +89,7 @@ pub async fn upload_cape(
     upload_texture(state, headers, path, TextureKind::Cape, multipart).await
 }
 
-/// PUT /api/user/profile/{uuid}/{textureType}
+/// PUT /service/api/user/profile/{uuid}/{textureType}
 async fn upload_texture(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -183,7 +187,7 @@ async fn upload_texture(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// DELETE /api/user/profile/{uuid}/skin
+/// DELETE /service/api/user/profile/{uuid}/skin
 pub async fn delete_skin(
     state: State<AppState>,
     headers: HeaderMap,
@@ -192,7 +196,7 @@ pub async fn delete_skin(
     delete_texture(state, headers, path, TextureKind::Skin).await
 }
 
-/// DELETE /api/user/profile/{uuid}/cape
+/// DELETE /service/api/user/profile/{uuid}/cape
 pub async fn delete_cape(
     state: State<AppState>,
     headers: HeaderMap,
@@ -201,7 +205,7 @@ pub async fn delete_cape(
     delete_texture(state, headers, path, TextureKind::Cape).await
 }
 
-/// DELETE /api/user/profile/{uuid}/{textureType}
+/// DELETE /service/api/user/profile/{uuid}/{textureType}
 async fn delete_texture(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -223,14 +227,45 @@ async fn delete_texture(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// GET /textures/{hash} — 材质文件服务
+/// GET /service/textures/{hash} - 材质文件服务
 pub async fn texture_file(
     State(state): State<AppState>,
     Path(hash): Path<String>,
-) -> ApiResult<impl axum::response::IntoResponse> {
+) -> ApiResult<impl IntoResponse> {
     let Some(data) = state
         .store
         .load(&hash)
+        .map_err(|e| ApiError::internal(e.to_string()))?
+    else {
+        return Ok(StatusCode::NOT_FOUND.into_response());
+    };
+    Ok(([(axum::http::header::CONTENT_TYPE, "image/png")], data).into_response())
+}
+
+/// GET /service/skins/MinecraftSkins/{username} - 旧式皮肤 API(legacy_skin_api=true 时由服务端处理)
+pub async fn legacy_skin(
+    State(state): State<AppState>,
+    Path(username): Path<String>,
+) -> ApiResult<impl IntoResponse> {
+    if !state.config.legacy_skin_api {
+        return Ok(StatusCode::NOT_FOUND.into_response());
+    }
+    let player = get_player_by_id(&state.pool, &username)
+        .await
+        .map_err(db_err)?;
+    let player = match player {
+        Some(p) => p,
+        None => get_player_by_name(&state.pool, &username)
+            .await
+            .map_err(db_err)?
+            .ok_or_else(|| ApiError::not_found("Unknown profile"))?,
+    };
+    let Some(skin_hash) = &player.skin_hash else {
+        return Ok(StatusCode::NOT_FOUND.into_response());
+    };
+    let Some(data) = state
+        .store
+        .load(skin_hash)
         .map_err(|e| ApiError::internal(e.to_string()))?
     else {
         return Ok(StatusCode::NOT_FOUND.into_response());

@@ -18,7 +18,7 @@ async fn full_yggdrasil_flow() {
     let app = &env.app;
 
     // 1. meta
-    let (status, meta) = call(app, Method::GET, "/", None, None).await;
+    let (status, meta) = call(app, Method::GET, "/service", None, None).await;
     assert_eq!(status, StatusCode::OK);
     assert!(
         meta["signaturePublickey"]
@@ -36,7 +36,7 @@ async fn full_yggdrasil_flow() {
     let (status, _) = call(
         app,
         Method::POST,
-        "/authserver/validate",
+        "/service/authserver/validate",
         Some(json!({"accessToken": access_token, "clientToken": client_token})),
         None,
     )
@@ -47,7 +47,7 @@ async fn full_yggdrasil_flow() {
     let (status, err) = call(
         app,
         Method::POST,
-        "/authserver/authenticate",
+        "/service/authserver/authenticate",
         Some(json!({"username": USERNAME, "password": "wrong"})),
         None,
     )
@@ -60,7 +60,7 @@ async fn full_yggdrasil_flow() {
     let (status, _) = call(
         app,
         Method::POST,
-        "/sessionserver/session/minecraft/join",
+        "/service/sessionserver/session/minecraft/join",
         Some(json!({
             "accessToken": access_token,
             "selectedProfile": env.player_id,
@@ -75,7 +75,7 @@ async fn full_yggdrasil_flow() {
         app,
         Method::GET,
         &format!(
-            "/sessionserver/session/minecraft/hasJoined?username={}&serverId={}",
+            "/service/sessionserver/session/minecraft/hasJoined?username={}&serverId={}",
             PLAYER_NAME, server_id
         ),
         None,
@@ -91,7 +91,7 @@ async fn full_yggdrasil_flow() {
         app,
         Method::GET,
         &format!(
-            "/sessionserver/session/minecraft/hasJoined?username={}&serverId={}",
+            "/service/sessionserver/session/minecraft/hasJoined?username={}&serverId={}",
             PLAYER_NAME, server_id
         ),
         None,
@@ -104,7 +104,7 @@ async fn full_yggdrasil_flow() {
     let (status, _) = call(
         app,
         Method::POST,
-        "/sessionserver/session/minecraft/join",
+        "/service/sessionserver/session/minecraft/join",
         Some(json!({
             "accessToken": access_token,
             "selectedProfile": "00000000000000000000000000000000",
@@ -119,7 +119,10 @@ async fn full_yggdrasil_flow() {
     let (status, profile) = call(
         app,
         Method::GET,
-        &format!("/sessionserver/session/minecraft/profile/{}", env.player_id),
+        &format!(
+            "/service/sessionserver/session/minecraft/profile/{}",
+            env.player_id
+        ),
         None,
         None,
     )
@@ -136,7 +139,7 @@ async fn full_yggdrasil_flow() {
     let (status, res) = call(
         app,
         Method::POST,
-        "/api/profiles/minecraft",
+        "/service/api/profiles/minecraft",
         Some(json!([PLAYER_NAME, "Nobody"])),
         None,
     )
@@ -159,7 +162,7 @@ async fn full_yggdrasil_flow() {
 
     let req = Request::builder()
         .method(Method::PUT)
-        .uri(format!("/api/user/profile/{}/skin", env.player_id))
+        .uri(format!("/service/api/user/profile/{}/skin", env.player_id))
         .header(header::AUTHORIZATION, format!("Bearer {}", access_token))
         .header(
             header::CONTENT_TYPE,
@@ -178,7 +181,7 @@ async fn full_yggdrasil_flow() {
     let (status, _) = call(
         app,
         Method::PUT,
-        &format!("/api/user/profile/{}/skin", env.player_id),
+        &format!("/service/api/user/profile/{}/skin", env.player_id),
         None,
         None,
     )
@@ -190,7 +193,7 @@ async fn full_yggdrasil_flow() {
         app,
         Method::GET,
         &format!(
-            "/sessionserver/session/minecraft/profile/{}?unsigned=false",
+            "/service/sessionserver/session/minecraft/profile/{}?unsigned=false",
             env.player_id
         ),
         None,
@@ -228,7 +231,7 @@ async fn full_yggdrasil_flow() {
     let hash = url.rsplit('/').next().unwrap();
     let req = Request::builder()
         .method(Method::GET)
-        .uri(format!("/textures/{}", hash))
+        .uri(format!("/service/textures/{}", hash))
         .extension(axum::extract::ConnectInfo(SocketAddr::from((
             IpAddr::V4(Ipv4Addr::LOCALHOST),
             12345,
@@ -243,7 +246,7 @@ async fn full_yggdrasil_flow() {
     let (status, refreshed) = call(
         app,
         Method::POST,
-        "/authserver/refresh",
+        "/service/authserver/refresh",
         Some(json!({
             "accessToken": access_token,
             "clientToken": client_token
@@ -260,7 +263,7 @@ async fn full_yggdrasil_flow() {
     let (status, _) = call(
         app,
         Method::POST,
-        "/authserver/validate",
+        "/service/authserver/validate",
         Some(json!({"accessToken": access_token})),
         None,
     )
@@ -271,7 +274,7 @@ async fn full_yggdrasil_flow() {
     let (status, certs) = call(
         app,
         Method::POST,
-        "/minecraftservices/player/certificates",
+        "/service/minecraftservices/player/certificates",
         None,
         Some(&new_token),
     )
@@ -290,7 +293,7 @@ async fn full_yggdrasil_flow() {
     let (status, _) = call(
         app,
         Method::POST,
-        "/authserver/invalidate",
+        "/service/authserver/invalidate",
         Some(json!({"accessToken": new_token})),
         None,
     )
@@ -299,7 +302,7 @@ async fn full_yggdrasil_flow() {
     let (status, _) = call(
         app,
         Method::POST,
-        "/authserver/validate",
+        "/service/authserver/validate",
         Some(json!({"accessToken": new_token})),
         None,
     )
@@ -311,7 +314,7 @@ async fn full_yggdrasil_flow() {
     let (status, _) = call(
         app,
         Method::POST,
-        "/authserver/signout",
+        "/service/authserver/signout",
         Some(json!({"username": USERNAME, "password": TEST_PASSWORD})),
         None,
     )
@@ -320,7 +323,7 @@ async fn full_yggdrasil_flow() {
     let (status, _) = call(
         app,
         Method::POST,
-        "/authserver/validate",
+        "/service/authserver/validate",
         Some(json!({"accessToken": token2})),
         None,
     )

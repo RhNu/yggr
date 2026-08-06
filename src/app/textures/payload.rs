@@ -28,7 +28,7 @@ pub fn build_textures_value(config: &Config, player: &Player) -> Result<String> 
         skin.insert(
             "url".to_string(),
             serde_json::Value::String(format!(
-                "{}/textures/{}",
+                "{}/service/textures/{}",
                 config.base_url.trim_end_matches('/'),
                 skin_hash
             )),
@@ -48,7 +48,7 @@ pub fn build_textures_value(config: &Config, player: &Player) -> Result<String> 
         cape.insert(
             "url".to_string(),
             serde_json::Value::String(format!(
-                "{}/textures/{}",
+                "{}/service/textures/{}",
                 config.base_url.trim_end_matches('/'),
                 cape_hash
             )),
@@ -96,7 +96,7 @@ mod tests {
             json["textures"]["SKIN"]["url"]
                 .as_str()
                 .unwrap()
-                .ends_with("/textures/abc123")
+                .ends_with("/service/textures/abc123")
         );
     }
 }

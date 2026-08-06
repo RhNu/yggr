@@ -1,4 +1,4 @@
-//! /minecraftservices/player/certificates — Minecraft 1.19+ 消息签名密钥对
+//! /service/minecraftservices/player/certificates - Minecraft 1.19+ 消息签名密钥对
 //!
 //! 响应中的 keyPair 由服务端私钥签名:
 //! - publicKeySignature: 对 publicKey(SPKI DER)的 SHA1withRSA 签名
@@ -49,7 +49,7 @@ fn internal(e: impl std::fmt::Display) -> ApiError {
     ApiError::internal(e.to_string())
 }
 
-/// POST /minecraftservices/player/certificates
+/// POST /service/minecraftservices/player/certificates
 pub async fn certificates(
     State(state): State<AppState>,
     headers: HeaderMap,

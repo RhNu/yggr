@@ -1,5 +1,5 @@
-//! 扩展 API:GET / 返回 API 元数据(meta、skinDomains、signaturePublickey)
-//! 并设置 ALI 头 X-Authlib-Injector-API-Location
+//! 扩展 API:GET /service 返回 API 元数据(meta、skinDomains、signaturePublickey)
+//! ALI 头在根路径 GET / 与此端点均可指向自身
 
 use axum::extract::State;
 use axum::http::HeaderName;
@@ -21,12 +21,34 @@ struct Meta {
     feature_non_email_login: bool,
     #[serde(rename = "feature.enable_profile_key")]
     feature_enable_profile_key: bool,
+    #[serde(
+        rename = "feature.legacy_skin_api",
+        skip_serializing_if = "Option::is_none"
+    )]
+    feature_legacy_skin_api: Option<bool>,
+    #[serde(
+        rename = "feature.no_mojang_namespace",
+        skip_serializing_if = "Option::is_none"
+    )]
+    feature_no_mojang_namespace: Option<bool>,
+    #[serde(
+        rename = "feature.enable_mojang_anti_features",
+        skip_serializing_if = "Option::is_none"
+    )]
+    feature_enable_mojang_anti_features: Option<bool>,
+    #[serde(
+        rename = "feature.username_check",
+        skip_serializing_if = "Option::is_none"
+    )]
+    feature_username_check: Option<bool>,
     links: MetaLinks,
 }
 
 #[derive(Debug, Serialize)]
 struct MetaLinks {
     homepage: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    register: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -37,22 +59,45 @@ struct MetaResponse {
     signature_publickey: String,
 }
 
-/// GET / — authlib-injector API 元数据
+/// GET /service - authlib-injector API 元数据
 pub async fn meta(State(state): State<AppState>) -> ApiResult<impl IntoResponse> {
     let pem = public_key_pem(&state.public_key)
         .map_err(|e| crate::core::error::ApiError::internal(e.to_string()))?;
 
-    let response = MetaResponse {
-        meta: Meta {
-            server_name: state.config.server_name.clone(),
-            implementation_name: state.config.implementation_name.clone(),
-            implementation_version: state.config.implementation_version.clone(),
-            feature_non_email_login: state.config.non_email_login,
-            feature_enable_profile_key: true,
-            links: MetaLinks {
-                homepage: state.config.base_url.clone(),
-            },
+    let meta = Meta {
+        server_name: state.config.server_name.clone(),
+        implementation_name: state.config.implementation_name.clone(),
+        implementation_version: state.config.implementation_version.clone(),
+        feature_non_email_login: state.config.non_email_login,
+        feature_enable_profile_key: true,
+        feature_legacy_skin_api: if state.config.legacy_skin_api {
+            Some(true)
+        } else {
+            None
         },
+        feature_no_mojang_namespace: if state.config.no_mojang_namespace {
+            Some(true)
+        } else {
+            None
+        },
+        feature_enable_mojang_anti_features: if state.config.enable_mojang_anti_features {
+            Some(true)
+        } else {
+            None
+        },
+        feature_username_check: if state.config.username_check {
+            Some(true)
+        } else {
+            None
+        },
+        links: MetaLinks {
+            homepage: state.config.base_url.clone(),
+            register: state.config.register_url.clone(),
+        },
+    };
+
+    let response = MetaResponse {
+        meta,
         skin_domains: state.config.texture_domains(),
         signature_publickey: pem,
     };
@@ -60,7 +105,7 @@ pub async fn meta(State(state): State<AppState>) -> ApiResult<impl IntoResponse>
     Ok((
         [(
             HeaderName::from_static("x-authlib-injector-api-location"),
-            "/",
+            "/service",
         )],
         JsonResponse(response),
     ))

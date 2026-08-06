@@ -51,11 +51,11 @@ impl ApiError {
         )
     }
 
-    /// 试图选择一个不属于自己的角色(400 IllegalArgumentException)
+    /// 试图选择一个不属于自己的角色(403 ForbiddenOperationException)
     pub fn invalid_profile_selection() -> Self {
         Self::new(
-            StatusCode::BAD_REQUEST,
-            "IllegalArgumentException",
+            StatusCode::FORBIDDEN,
+            "ForbiddenOperationException",
             "Profile is not owned by the user.",
         )
     }

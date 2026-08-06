@@ -17,7 +17,7 @@ async fn token_limit_revokes_oldest() {
         let (status, res) = call(
             app,
             Method::POST,
-            "/authserver/authenticate",
+            "/service/authserver/authenticate",
             Some(json!({"username": USERNAME, "password": TEST_PASSWORD})),
             None,
         )
@@ -32,7 +32,7 @@ async fn token_limit_revokes_oldest() {
     let (status, _) = call(
         app,
         Method::POST,
-        "/authserver/validate",
+        "/service/authserver/validate",
         Some(json!({"accessToken": tokens[0]})),
         None,
     )
@@ -43,7 +43,7 @@ async fn token_limit_revokes_oldest() {
     let (status, _) = call(
         app,
         Method::POST,
-        "/authserver/validate",
+        "/service/authserver/validate",
         Some(json!({"accessToken": tokens[10]})),
         None,
     )

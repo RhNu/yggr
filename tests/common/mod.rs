@@ -149,7 +149,7 @@ pub async fn authenticate(app: &Router) -> (String, String) {
     let (status, res) = call(
         app,
         Method::POST,
-        "/authserver/authenticate",
+        "/service/authserver/authenticate",
         Some(json!({
             "username": USERNAME,
             "password": TEST_PASSWORD,

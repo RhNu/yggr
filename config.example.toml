@@ -39,3 +39,16 @@ seed_file = "seed.toml"
 # 实现信息(显示在 meta)
 implementation_name = "yggr"
 implementation_version = "0.1.0"
+
+# 高级功能选项(默认 false,与 authlib-injector 默认行为兼容)
+# legacy_skin_api = false      # 旧式皮肤 API 由服务端处理
+# no_mojang_namespace = false  # 禁用 @mojang 命名空间
+# enable_mojang_anti_features = false  # 开启 Minecraft anti-features
+# username_check = false      # 启用用户名验证(非英文字符无法进服)
+
+# 注册页面地址(显示在 meta.links.register);不设置则不输出
+# register_url = "https://ygg.example.com/register"
+
+# 令牌有效窗口(天);超过此窗口但在 token_ttl_days 内的令牌为暂时失效(仅可刷新)
+# 默认等于 token_ttl_days,即不启用暂时失效
+# token_active_window_days = 15

@@ -15,7 +15,7 @@ async fn non_email_login_and_role_name() {
     let (status, res) = call(
         app,
         Method::POST,
-        "/authserver/authenticate",
+        "/service/authserver/authenticate",
         Some(json!({
             "username": PLAYER_NAME,
             "password": TEST_PASSWORD
@@ -38,7 +38,7 @@ async fn refresh_with_profile_selection_errors() {
     let (status, err) = call(
         app,
         Method::POST,
-        "/authserver/refresh",
+        "/service/authserver/refresh",
         Some(json!({
             "accessToken": access_token,
             "selectedProfile": {"id": env.player_id, "name": PLAYER_NAME}
@@ -53,7 +53,7 @@ async fn refresh_with_profile_selection_errors() {
     let (status, _) = call(
         app,
         Method::POST,
-        "/authserver/validate",
+        "/service/authserver/validate",
         Some(json!({"accessToken": "invalid-token"})),
         None,
     )

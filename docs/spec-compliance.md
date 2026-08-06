@@ -1,7 +1,6 @@
 # authlib-injector 规范符合性核对表
 
 > 对照《[Yggdrasil 服务端技术规范](https://yushijinhun.github.io/authlib-injector/zh/Yggdrasil-%E6%9C%8D%E5%8A%A1%E7%AB%AF%E6%8A%80%E6%9C%AF%E8%A7%84%E8%8C%83.html)》逐条核对 yggr 现有实现。
-> 核对日期:2026-08-06。
 > 架构总览见 [`architecture.md`](architecture.md)。
 
 ---
@@ -13,13 +12,13 @@
 | 1.1  | UTF-8 编码                                                                                                          | 全局                                       |                                                                                                               |
 | 1.2  | JSON 请求/响应                                                                                                      | 全部端点                                   |                                                                                                               |
 | 1.3  | `Content-Type: application/json; charset=utf-8`                                                                     | `core/types.rs::JsonResponse`              | 错误与成功响应统一输出,均带 charset                                                                           |
-| 1.4  | 所有 API 使用 HTTPS                                                                                                 | 部署层                                     | ⚠️ yggr 自身 HTTP,生产须反代终结 TLS(README 已说明)                                                           |
+| 1.4  | 所有 API 使用 HTTPS                                                                                                 | 部署层                                     | yggr 自身 HTTP,生产须反代终结 TLS(README 已说明)                                                            |
 | 1.5  | 错误格式 `{error, errorMessage, cause}`                                                                             | `core/error.rs::ApiError`                  | cause 恒为 null(序列化输出),规范允许省略                                                                      |
-| 1.6  | 令牌无效 → `403 ForbiddenOperationException / Invalid token.`                                                       | `core/error.rs::invalid_token`             | validate/refresh/join 共用                                                                                    |
-| 1.7  | 密码错误或短时多次登录失败 → `403 ForbiddenOperationException / Invalid credentials. Invalid username or password.` | `core/error.rs::invalid_credentials`       | authenticate/signout;限流超限同样返回此错误(符合"按密码错误处理")                                             |
-| 1.8  | 向已绑定角色令牌指定角色 → `400 IllegalArgumentException / Access token already has a profile assigned.`            | `core/error.rs::profile_already_assigned`  | refresh 中 `selectedProfile` + 已绑定角色                                                                     |
-| 1.9  | 向令牌绑定不属于其用户的角色(非标准)                                                                                | `core/error.rs::invalid_profile_selection` | ⚠️ 规范此项"未定义"(推测 403);yggr 返回 400 IllegalArgumentException "Profile is not owned by the user.",合理 |
-| 1.10 | 使用错误角色加入服务器 → `403 ForbiddenOperationException / Invalid token.`                                         | `api/session.rs::join`                     | selectedProfile 与令牌绑定角色不一致                                                                          |
+| 1.6  | 令牌无效 -> `403 ForbiddenOperationException / Invalid token.`                                                       | `core/error.rs::invalid_token`             | validate/refresh/join 共用                                                                                    |
+| 1.7  | 密码错误或短时多次登录失败 -> `403 ForbiddenOperationException / Invalid credentials. Invalid username or password.` | `core/error.rs::invalid_credentials`       | authenticate/signout;限流超限同样返回此错误(符合"按密码错误处理")                                             |
+| 1.8  | 向已绑定角色令牌指定角色 -> `400 IllegalArgumentException / Access token already has a profile assigned.`            | `core/error.rs::profile_already_assigned`  | refresh 中 `selectedProfile` + 已绑定角色                                                                     |
+| 1.9  | 向令牌绑定不属于其用户的角色(非标准)                                                                                | `core/error.rs::invalid_profile_selection` | 规范此项为非标准,要求 403 ForbiddenOperationException;yggr 返回 403,errorMessage 为 `Profile is not owned by the user.` |
+| 1.10 | 使用错误角色加入服务器 -> `403 ForbiddenOperationException / Invalid token.`                                         | `api/session.rs::join`                     | selectedProfile 与令牌绑定角色不一致                                                                          |
 | 1.11 | 无符号 UUID 数据格式                                                                                                | 全局                                       | id/URL 路径均无连字符                                                                                         |
 
 ## 2. 模型
@@ -57,16 +56,16 @@
 | 2.3.3 | 绑定角色可为空                       | `core/db`(tokens.player_id)    |                                                                                                                                                    |
 | 2.3.4 | 颁发时间、过期时限(如 15 天)         | `core/db`(tokens 表)           | `token_ttl_days` 默认 15                                                                                                                           |
 | 2.3.5 | 状态不可逆;刷新仅颁新令牌            | `api/auth.rs::refresh`         | 旧令牌删除                                                                                                                                         |
-| 2.3.6 | 暂时失效状态(角色改名触发)           | —                              | ⚠️ 规范明确"非必须",yggr 未实现,等价无暂时失效,启动器逻辑正常                                                                                      |
+| 2.3.6 | 暂时失效状态(角色改名触发/时间阈值)    | `api/auth.rs::TokenStatus`     | 通过 `token_active_window_days` 配置(默认 = token_ttl_days,即不启用);小于 ttl 时启用:令牌超过 active window 但未过期为暂时失效,仅可刷新            |
 | 2.3.7 | 令牌数量上限(如 10 个),超限吊销最旧  | `core/db::enforce_token_limit` | 每用户上限 10(`api/auth.rs::MAX_TOKENS_PER_USER`),颁发后按 issued_at 吊销最旧;过期令牌由启动时与后台任务定期清理(`core/db::delete_expired_tokens`) |
 | 2.3.8 | refresh 失败时原令牌依然有效         | `api/auth.rs::refresh`         | 先颁发新令牌,成功后再吊销原令牌;失败时原令牌保持有效                                                                                               |
 
-## 3. 认证 API(/authserver)
+## 3. 认证 API(/service/authserver)
 
 | #    | 端点         | 规范要求                                                                | 实现位置                    | 说明                                            |
 | ---- | ------------ | ----------------------------------------------------------------------- | --------------------------- | ----------------------------------------------- |
 | 3.1  | authenticate | clientToken 缺省生成随机 UUID;任何 clientToken 可接受                   | `api/auth`                  |                                                 |
-| 3.2  | authenticate | 角色绑定:无角色→空、单角色→自动绑定、多角色→空                          | `api/auth.rs::authenticate` |                                                 |
+| 3.2  | authenticate | 角色绑定:无角色->空、单角色->自动绑定、多角色->空                          | `api/auth.rs::authenticate` |                                                 |
 | 3.3  | authenticate | `requestUser` 缺省 false                                                | `api/auth`                  |                                                 |
 | 3.4  | authenticate | 响应含 accessToken/clientToken/availableProfiles/selectedProfile?/user? | `core/types`                | availableProfiles 恒输出(可为空数组)            |
 | 3.5  | authenticate | 限流"应针对用户,而不是客户端 IP"                                        | `app/state.rs::RateLimiter` | 按 IP(`X-Forwarded-For` 首值)与用户名双维度限流 |
@@ -74,52 +73,52 @@
 | 3.7  | refresh      | clientToken 提供则校验,否则只查 accessToken                             | `api/auth.rs::refresh`      |                                                 |
 | 3.8  | refresh      | 新令牌 clientToken 与原令牌相同                                         | `api/auth.rs::refresh`      |                                                 |
 | 3.9  | refresh      | selectedProfile 角色选择:仅原令牌未绑定角色时可执行,须属于该用户        | `api/auth.rs::refresh`      |                                                 |
-| 3.10 | refresh      | 暂时失效令牌仍可刷新                                                    | —                           | ⚠️ yggr 未实现暂时失效,天然满足                 |
-| 3.11 | validate     | 有效 → 204,否则按令牌无效处理                                           | `api/auth.rs::validate`     |                                                 |
+| 3.10 | refresh      | 暂时失效令牌仍可刷新                                                    | `api/auth.rs::refresh`      | 接受 `TemporarilyInvalid` 状态令牌               |
+| 3.11 | validate     | 有效 -> 204,否则按令牌无效处理                                           | `api/auth.rs::validate`     | 暂时失效令牌视为无效                             |
 | 3.12 | invalidate   | 只检查 accessToken;无论成败返回 204                                     | `api/auth.rs::invalidate`   |                                                 |
-| 3.13 | signout      | 验密后吊销用户全部令牌 → 204                                            | `api/auth.rs::signout`      |                                                 |
+| 3.13 | signout      | 验密后吊销用户全部令牌 -> 204                                            | `api/auth.rs::signout`      |                                                 |
 | 3.14 | signout      | 与登录同等限流                                                          | `api/auth.rs::signout`      | IP + 用户名双维度,与 authenticate 一致          |
 
-## 4. 会话 API(/sessionserver)
+## 4. 会话 API(/service/sessionserver)
 
 | #   | 端点           | 规范要求                                                  | 实现位置                     | 说明                                                                                       |
 | --- | -------------- | --------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------ |
 | 4.1 | join           | 令牌有效且 selectedProfile 与绑定角色一致才成功           | `api/session.rs::join`       | 失败返回 403 Invalid token.                                                                |
 | 4.2 | join           | 记录 serverId/accessToken/客户端 IP;内存存储,过期(如 30s) | `api/session.rs::join`       | 记录 player_id/name/ip(以角色代替 accessToken,功能等价);`JOIN_TTL_MS=30_000`;后台 60s 清理 |
-| 4.3 | join           | serverId 作主键;成功 → 204                                | `api/session.rs::join`       |                                                                                            |
+| 4.3 | join           | serverId 作主键;成功 -> 204                                | `api/session.rs::join`       |                                                                                            |
 | 4.4 | hasJoined      | username 须与记录角色名一致                               | `api/session.rs::has_joined` |                                                                                            |
 | 4.5 | hasJoined      | ip 参数可选,`prevent-proxy-connections` 开启时校验        | `api/session.rs::has_joined` | 对应 `check_ip` 配置;缺 ip 参数时放行                                                      |
-| 4.6 | hasJoined      | 成功 → 角色完整信息(含签名);失败 → 204                    | `api/session.rs::has_joined` | 含签名 textures(`signed=true`)                                                             |
-| 4.7 | hasJoined      | —(防重放)                                                 | `api/session.rs::has_joined` | 超越规范的安全加强:一次性消费                                                              |
+| 4.6 | hasJoined      | 成功 -> 角色完整信息(含签名);失败 -> 204                    | `api/session.rs::has_joined` | 含签名 textures(`signed=true`)                                                             |
+| 4.7 | hasJoined      | -(防重放)                                                 | `api/session.rs::has_joined` | 超越规范的安全加强:一次性消费                                                              |
 | 4.8 | profile/{uuid} | `unsigned` 缺省 true(无签名);`false` 含签名               | `api/session.rs::profile`    | 仅 `unsigned=false` 时签名                                                                 |
-| 4.9 | profile/{uuid} | 角色不存在 → 204                                          | `api/session.rs::profile`    |                                                                                            |
+| 4.9 | profile/{uuid} | 角色不存在 -> 204                                          | `api/session.rs::profile`    |                                                                                            |
 
-## 5. 角色 API(/api)
+## 5. 角色 API(/service/api)
 
 | #   | 端点                    | 规范要求                                              | 实现位置                          | 说明                                             |
 | --- | ----------------------- | ----------------------------------------------------- | --------------------------------- | ------------------------------------------------ |
-| 5.1 | /api/profiles/minecraft | 返回命中角色,不含 properties,不存在的跳过,次序无要求  | `api/profiles.rs::batch_profiles` | 保持输入顺序                                     |
-| 5.2 | /api/profiles/minecraft | 单次查询上限(至少 2,防 CC)                            | `api/profiles`                    | 上限 100,超限 400                                |
-| 5.3 | 材质上传                | `Authorization: Bearer {accessToken}`;缺失/无效 → 401 | `api/profiles.rs::require_bearer` | 中间件在路由层执行,未认证请求返回 401 而非 400   |
-| 5.4 | 材质上传                | 成功 → 204                                            | `api/profiles`                    |                                                  |
+| 5.1 | /service/api/profiles/minecraft | 返回命中角色,不含 properties,不存在的跳过,次序无要求  | `api/profiles.rs::batch_profiles` | 保持输入顺序                                     |
+| 5.2 | /service/api/profiles/minecraft | 单次查询上限(至少 2,防 CC)                            | `api/profiles`                    | 上限 100,超限 400                                |
+| 5.3 | 材质上传                | `Authorization: Bearer {accessToken}`;缺失/无效 -> 401 | `api/profiles.rs::require_bearer` | 中间件在路由层执行,未认证请求返回 401 而非 400   |
+| 5.4 | 材质上传                | 成功 -> 204                                            | `api/profiles`                    |                                                  |
 | 5.5 | 材质上传                | PUT multipart:model(仅皮肤,slim/空)+ file(image/png)  | `api/profiles.rs::upload_texture` | file 未带 Content-Type 时放行;带则必须 image/png |
-| 5.6 | 材质上传                | DELETE 清除 → 恢复默认                                | `api/profiles.rs::delete_texture` |                                                  |
+| 5.6 | 材质上传                | DELETE 清除 -> 恢复默认                                | `api/profiles.rs::delete_texture` |                                                  |
 
 ## 6. 扩展 API
 
 | #    | 规范要求                                                                    | 实现位置                           | 说明                                                                                                         |
 | ---- | --------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| 6.1  | `GET /` 返回 meta + skinDomains + signaturePublickey                        | `api/meta.rs`                      |                                                                                                              |
+| 6.1  | `GET /service` 返回 meta + skinDomains + signaturePublickey                   | `api/meta.rs`                      |                                                                                                              |
 | 6.2  | signaturePublickey PEM 格式(仅允许换行空白)                                 | `core/crypto.rs::public_key_pem`   | LineEnding::LF                                                                                               |
 | 6.3  | skinDomains 规则:`.` 前缀匹配子域,否则精确匹配                              | `core/config.rs::texture_domains`  | 默认推 `.{base_url host}`                                                                                    |
-| 6.4  | meta:serverName/implementationName/implementationVersion/links              | `api/meta.rs`                      | links.homepage = base_url                                                                                    |
+| 6.4  | meta:serverName/implementationName/implementationVersion/links              | `api/meta.rs`                      | links.homepage = base_url;links.register = register_url(可选)                                              |
 | 6.5  | `feature.non_email_login`                                                   | `api/meta.rs`                      | 跟随配置                                                                                                     |
-| 6.6  | `feature.legacy_skin_api`(可选)                                             | —                                  | 未设置=false,authlib-injector 本地 polyfill,无需服务端支持                                                   |
-| 6.7  | `feature.no_mojang_namespace`(可选)                                         | —                                  | 未设置=false,默认行为兼容                                                                                    |
-| 6.8  | `feature.enable_mojang_anti_features`(可选)                                 | —                                  | 未设置=false,默认行为兼容                                                                                    |
+| 6.6  | `feature.legacy_skin_api`(可选)                                             | `api/meta.rs` / `api/profiles.rs`  | 配置 `legacy_skin_api=true` 时输出;同时启用 `GET /service/skins/MinecraftSkins/{username}.png` 服务端处理    |
+| 6.7  | `feature.no_mojang_namespace`(可选)                                         | `api/meta.rs`                      | 配置 `no_mojang_namespace=true` 时输出                                                                       |
+| 6.8  | `feature.enable_mojang_anti_features`(可选)                                 | `api/meta.rs`                      | 配置 `enable_mojang_anti_features=true` 时输出                                                                |
 | 6.9  | `feature.enable_profile_key`                                                | `api/meta` / `api/certificates.rs` | true,已实现 certificates                                                                                     |
-| 6.10 | `feature.username_check`(可选)                                              | —                                  | 未设置=false,默认行为兼容                                                                                    |
-| 6.11 | ALI 头 `X-Authlib-Injector-API-Location`                                    | `api/meta.rs`                      | 值 `/`(指向自身,规范允许)                                                                                    |
+| 6.10 | `feature.username_check`(可选)                                              | `api/meta.rs`                      | 配置 `username_check=true` 时输出                                                                             |
+| 6.11 | ALI 头 `X-Authlib-Injector-API-Location`                                    | `api/meta.rs` / `api/mod.rs`       | 值 `/service`(指向自身);根路径 GET / 同样返回此头                                                              |
 | 6.12 | 签名密钥:RSA(推荐 4096)、避免密钥变化、多实例共享                           | `core/crypto.rs::generate_keypair` | RSA-4096 主签名密钥(持久化于 `data/private_key.pem` 保证稳定);certificates 会话密钥保持 2048(与 Mojang 一致) |
 | 6.13 | certificates:publicKeySignature = SHA1withRSA(publicKey DER)                | `api/certificates.rs`              |                                                                                                              |
 | 6.14 | certificates:publicKeySignatureV2 = SHA256withRSA({expiresAt,keyPair} JSON) | `api/certificates.rs`              | 固定紧凑 JSON 格式,与 Gson 输出一致                                                                          |
@@ -127,8 +126,9 @@
 
 ## 7. 汇总
 
-### 无需实现(规范明确可选/默认兼容)
+### 全部规范项已符合
 
-- 暂时失效令牌状态(§2.3.6)
-- `legacy_skin_api` / `no_mojang_namespace` / `enable_mojang_anti_features` / `username_check` feature 选项
-- 角色改名、改名触发令牌失效(无改名 API 的场景)
+- 暂时失效令牌状态(§2.3.6)已实现:通过 `token_active_window_days` 配置时间阈值
+- `legacy_skin_api` feature 选项已实现:配置为 true 时服务端处理旧式皮肤 API
+- `no_mojang_namespace` / `enable_mojang_anti_features` / `username_check` feature 选项已实现:配置驱动,默认 false
+- `links.register` 已实现:配置 `register_url` 时输出
