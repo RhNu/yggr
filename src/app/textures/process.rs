@@ -32,7 +32,10 @@ pub fn sanitize_png(data: &[u8], kind: TextureKind) -> Result<Vec<u8>> {
     validate_dimensions(w, h, kind)?;
 
     // 解码像素
-    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let buf_size = reader
+        .output_buffer_size()
+        .context("invalid PNG: failed to get buffer size")?;
+    let mut buf = vec![0u8; buf_size];
     let info = reader
         .next_frame(&mut buf)
         .context("invalid PNG: failed to decode")?;
@@ -110,7 +113,10 @@ pub fn pad_cape(data: &[u8]) -> Result<Vec<u8>> {
     // 22x17 倍数:补足到 (64a, 32a)
     let a = w / 22;
     let (tw, th) = (64 * a, 32 * a);
-    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let buf_size = reader
+        .output_buffer_size()
+        .context("invalid PNG: failed to get buffer size")?;
+    let mut buf = vec![0u8; buf_size];
     let info = reader
         .next_frame(&mut buf)
         .context("invalid PNG: failed to decode")?;
@@ -183,7 +189,7 @@ mod tests {
         let mut reader = decoder.read_info().unwrap();
         assert_eq!(reader.info().width, 64);
         assert_eq!(reader.info().height, 32);
-        let mut buf = vec![0u8; reader.output_buffer_size()];
+        let mut buf = vec![0u8; reader.output_buffer_size().expect("buffer size")];
         reader.next_frame(&mut buf).unwrap();
         assert_eq!(reader.info().color_type, PngColorType::Rgba);
     }

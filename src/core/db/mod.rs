@@ -162,16 +162,22 @@ pub async fn update_player_texture(
     kind: TextureKind,
     hash: Option<&str>,
 ) -> Result<()> {
-    let column = match kind {
-        TextureKind::Skin => "skin_hash",
-        TextureKind::Cape => "cape_hash",
-    };
-    let sql = format!("UPDATE players SET {} = ? WHERE id = ?", column);
-    sqlx::query(&sql)
-        .bind(hash)
-        .bind(player_id)
-        .execute(pool)
-        .await?;
+    match kind {
+        TextureKind::Skin => {
+            sqlx::query("UPDATE players SET skin_hash = ? WHERE id = ?")
+                .bind(hash)
+                .bind(player_id)
+                .execute(pool)
+                .await?;
+        }
+        TextureKind::Cape => {
+            sqlx::query("UPDATE players SET cape_hash = ? WHERE id = ?")
+                .bind(hash)
+                .bind(player_id)
+                .execute(pool)
+                .await?;
+        }
+    }
     Ok(())
 }
 
