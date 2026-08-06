@@ -8,8 +8,3 @@
 pub mod api;
 pub mod app;
 pub mod core;
-
-// 兼容路径(迁移期):新代码建议使用 yggr::core::* / yggr::app::* / yggr::api::*
-pub use api::build_app;
-pub use app::{state, textures, user};
-pub use core::{config, crypto, db, error, types};

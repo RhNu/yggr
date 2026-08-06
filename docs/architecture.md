@@ -137,34 +137,34 @@ flowchart TD
 
 ## 3. 模块结构
 
-按依赖方向分层:**api**(HTTP 处理器)→ **app**(应用服务)→ **core**(基础设施),各层 `mod.rs` 聚合导出。
+按依赖方向分层:**api**(HTTP 处理器)→ **app**(应用服务)→ **core**(基础设施),各层 `mod.rs` 仅声明子模块。
 
 ```
 src/
 ├── main.rs              服务入口:配置 → 数据库 → 密钥 → 用户初始化 → HTTP 服务 + join 会话定期清理;Ctrl+C/SIGTERM 优雅退出
-├── lib.rs               模块声明与分层 re-export(兼容旧路径);build_app 在 api 层
+├── lib.rs               模块声明;build_app 在 api 层
 ├── core/                基础设施层(无 HTTP 处理器,不依赖业务)
-│   ├── mod.rs           聚合导出(config/crypto/db/error/types)
+│   ├── mod.rs           子模块声明(config/crypto/db/error/types)
 │   ├── config.rs        配置解析(TOML 分区结构)与默认值;环境变量覆盖;材质域名白名单推导
 │   ├── crypto.rs        RSA 密钥生成与加载、SHA1withRSA 签名、argon2id、离线 UUID、随机令牌
 │   ├── error.rs         ApiError(统一错误格式)-> IntoResponse
 │   ├── types.rs         公共序列化类型(JsonResponse / Property / ProfileResponse / UserResponse)
 │   └── db/              SQLite 数据层
-│       ├── mod.rs       聚合导出(models/queries)
+│   ├── mod.rs           模型导出(models)+ 查询函数
 │       ├── models.rs    User / Player / Token / TextureKind 数据模型
 │       └── queries.rs   Schema、初始化、用户/角色/令牌 CRUD
 ├── app/                 应用服务层(共享状态、材质系统、用户初始化)
-│   ├── mod.rs           聚合导出(user/state/textures)
+│   ├── mod.rs           子模块声明(state/textures/user)
 │   ├── state.rs         共享状态:AppState(池/密钥/会话缓存/限流器)、JoinRecord、RateLimiter
 │   ├── user.rs          用户初始化(user.toml 创建允许登录的用户)
 │   └── textures/        材质系统
-│       ├── mod.rs       聚合导出(store/process/payload/defaults)
+│       ├── mod.rs       公共 API 导出(store/process/payload/defaults)
 │       ├── store.rs     内容寻址存储 data/textures/{sha256}.png
 │       ├── process.rs   PNG 安全校验(sanitize/pad)
 │       ├── payload.rs   textures 属性构造与签名
 │       └── defaults.rs  内置默认皮肤(steve/alex),无皮肤时回退
 └── api/                 HTTP 处理器层(全部规范路径挂载于 /service 下)
-    ├── mod.rs           build_app 路由组装 + 根路径 ALI + 聚合导出
+    ├── mod.rs           build_app 路由组装 + 根路径 ALI
     ├── auth.rs          /service/authserver/* 五个认证端点 + Bearer 令牌解析 + TokenStatus
     ├── session.rs       /service/sessionserver/*:join / hasJoined / profile 查询
     ├── profiles.rs      /service/api/profiles/minecraft 批量查询 + 材质上传/清除 + 材质文件 + 旧式皮肤 API

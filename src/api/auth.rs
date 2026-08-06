@@ -142,6 +142,7 @@ pub struct ValidateRequest {
 #[serde(rename_all = "camelCase")]
 pub struct InvalidateRequest {
     pub access_token: String,
+    #[allow(dead_code)]
     pub client_token: Option<String>,
 }
 

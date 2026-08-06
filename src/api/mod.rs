@@ -11,18 +11,6 @@ mod meta;
 mod profiles;
 mod session;
 
-pub use auth::{
-    TokenStatus, authenticate, bearer_token, client_ip, invalidate, refresh, signout, validate,
-};
-pub use certificates::certificates;
-pub use manage::{create_player_handler, delete_player_handler, me, update_skin_model_handler};
-pub use meta::meta;
-pub use profiles::{
-    batch_profiles, default_skin, delete_cape, delete_skin, legacy_skin, require_bearer,
-    texture_file, upload_cape, upload_skin,
-};
-pub use session::{has_joined, join, profile};
-
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Response, header};
