@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -17,6 +18,25 @@ use yggr::app::textures::{DefaultSkins, TextureStore};
 use yggr::core::config::Config;
 use yggr::core::crypto;
 use yggr::core::db;
+
+#[cfg(unix)]
+async fn wait_shutdown_signal() {
+    use tokio::signal::unix::{SignalKind, signal};
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => info!("received Ctrl+C, shutting down"),
+        _ = signal(SignalKind::terminate())
+            .expect("install SIGTERM handler")
+            .recv() => info!("received SIGTERM, shutting down"),
+    }
+}
+
+#[cfg(not(unix))]
+async fn wait_shutdown_signal() {
+    tokio::signal::ctrl_c()
+        .await
+        .expect("install Ctrl+C handler");
+    info!("received Ctrl+C, shutting down");
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -79,19 +99,33 @@ async fn main() -> Result<()> {
     };
 
     // 定期清理过期的 join 会话与令牌
-    {
+    let shutdown = CancellationToken::new();
+    let cleanup_handle = {
         let state = state.clone();
+        let token = shutdown.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
             loop {
-                interval.tick().await;
-                state.cleanup_sessions();
-                if let Err(e) = db::delete_expired_tokens(&state.pool, crypto::now_millis()).await {
-                    warn!("failed to clean expired tokens: {e}");
+                tokio::select! {
+                    _ = interval.tick() => {
+                        state.cleanup_sessions();
+                        if let Err(e) = db::delete_expired_tokens(
+                            &state.pool,
+                            crypto::now_millis(),
+                        )
+                        .await
+                        {
+                            warn!("failed to clean expired tokens: {e}");
+                        }
+                    }
+                    _ = token.cancelled() => {
+                        info!("cleanup task stopped");
+                        break;
+                    }
                 }
             }
-        });
-    }
+        })
+    };
 
     // HTTP 服务
     let app = build_app(state);
@@ -100,10 +134,21 @@ async fn main() -> Result<()> {
         "yggr {} listening on {} (meta: {}/)",
         config.implementation_version, config.listen, config.base_url
     );
+    let token = shutdown.clone();
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
+    .with_graceful_shutdown(async move {
+        wait_shutdown_signal().await;
+        token.cancel();
+    })
     .await?;
+
+    info!("server stopped, waiting for background task...");
+    if let Err(e) = cleanup_handle.await {
+        warn!("cleanup task join error: {e}");
+    }
+    info!("shutdown complete");
     Ok(())
 }

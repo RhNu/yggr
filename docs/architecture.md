@@ -143,7 +143,7 @@ flowchart TD
 
 ```
 src/
-├── main.rs              服务入口:配置 → 数据库 → 密钥 → 种子 → HTTP 服务 + join 会话定期清理
+├── main.rs              服务入口:配置 → 数据库 → 密钥 → 种子 → HTTP 服务 + join 会话定期清理;Ctrl+C/SIGTERM 优雅退出
 ├── lib.rs               模块声明与分层 re-export(兼容旧路径);build_app 在 api 层
 ├── core/                基础设施层(无 HTTP 处理器,不依赖业务)
 │   ├── mod.rs           聚合导出(config/crypto/db/error/types)
