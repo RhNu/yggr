@@ -52,3 +52,9 @@ implementation_version = "0.1.0"
 # 令牌有效窗口(天);超过此窗口但在 token_ttl_days 内的令牌为暂时失效(仅可刷新)
 # 默认等于 token_ttl_days,即不启用暂时失效
 # token_active_window_days = 15
+
+# 每用户角色数量上限
+max_players_per_user = 5
+
+# 前端静态文件目录(为空则不提供前端管理界面)
+frontend_dir = "frontend/dist"

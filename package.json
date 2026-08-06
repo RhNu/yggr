@@ -1,0 +1,14 @@
+{
+  "name": "yggr",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "node dev.mjs",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "build": "pnpm --filter frontend build",
+    "preview": "pnpm --filter frontend preview"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

@@ -5,3 +5,7 @@
 /data
 /config.toml
 /seed.toml
+
+# Frontend
+node_modules/
+dist/

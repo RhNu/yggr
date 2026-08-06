@@ -57,6 +57,10 @@ pub struct Config {
     /// 令牌有效窗口(天);超过此窗口但在 token_ttl_days 内的令牌为暂时失效状态
     /// 默认等于 token_ttl_days,即不启用暂时失效
     pub token_active_window_days: i64,
+    /// 每用户角色数量上限
+    pub max_players_per_user: u32,
+    /// 前端静态文件目录(None 则不提供前端)
+    pub frontend_dir: Option<PathBuf>,
 }
 
 impl Default for Config {
@@ -81,6 +85,8 @@ impl Default for Config {
             username_check: false,
             register_url: None,
             token_active_window_days: 15,
+            max_players_per_user: 5,
+            frontend_dir: Some(PathBuf::from("frontend/dist")),
         }
     }
 }

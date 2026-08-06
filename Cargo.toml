@@ -19,7 +19,7 @@ md-5 = "0.10"
 uuid = { version = "1", features = ["v4", "serde"] }
 base64 = "0.22"
 png = "0.17"
-tower-http = { version = "0.6", features = ["trace", "limit"] }
+tower-http = { version = "0.6", features = ["trace", "limit", "fs"] }
 toml = "0.8"
 anyhow = "1"
 rand = "0.8"

@@ -175,6 +175,35 @@ pub async fn update_player_texture(
     Ok(())
 }
 
+/// 删除角色(关联令牌由 ON DELETE CASCADE 自动清理)
+pub async fn delete_player(pool: &SqlitePool, id: &str) -> Result<bool> {
+    let result = sqlx::query("DELETE FROM players WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected() > 0)
+}
+
+/// 更新角色皮肤模型(classic / slim)
+pub async fn update_skin_model(pool: &SqlitePool, player_id: &str, model: &str) -> Result<()> {
+    sqlx::query("UPDATE players SET skin_model = ? WHERE id = ?")
+        .bind(model)
+        .bind(player_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// 统计用户拥有的角色数量
+pub async fn count_players_by_user(pool: &SqlitePool, user_id: &str) -> Result<i64> {
+    Ok(
+        sqlx::query_scalar("SELECT COUNT(*) FROM players WHERE user_id = ?")
+            .bind(user_id)
+            .fetch_one(pool)
+            .await?,
+    )
+}
+
 /// 批量按名称查询角色(保持输入顺序,不存在的跳过)
 pub async fn get_players_by_names(pool: &SqlitePool, names: &[String]) -> Result<Vec<Player>> {
     let mut players = Vec::new();
