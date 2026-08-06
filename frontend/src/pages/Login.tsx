@@ -1,10 +1,10 @@
 import { useState } from "react";
 
-import { login } from "../api";
-import Button from "../components/ui/Button";
-import Input from "../components/ui/Input";
-import { createLogger } from "../logger";
-import { useAuthStore } from "../store/authStore";
+import { login } from "@/api";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import { createLogger } from "@/logger";
+import { useAuthStore } from "@/store/authStore";
 
 const log = createLogger("Login");
 

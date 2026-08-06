@@ -1,5 +1,5 @@
-import { createLogger } from "./logger";
-import { getToken } from "./store/authStore";
+import { createLogger } from "@/logger";
+import { getToken } from "@/store/authStore";
 
 const log = createLogger("api");
 const API_BASE = "";

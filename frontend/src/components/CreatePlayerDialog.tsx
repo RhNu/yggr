@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 
-import { createPlayer } from "../api";
-import { useAsyncAction } from "../hooks/useAsyncAction";
-import Button from "./ui/Button";
-import Dialog from "./ui/Dialog";
-import Input from "./ui/Input";
-import Select from "./ui/Select";
+import { createPlayer } from "@/api";
+import Button from "@/components/ui/Button";
+import Dialog from "@/components/ui/Dialog";
+import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
+import { useAsyncAction } from "@/hooks/useAsyncAction";
 
 interface Props {
   open: boolean;

@@ -1,8 +1,8 @@
 import { Route, Switch } from "wouter";
 
-import Dashboard from "./pages/Dashboard";
-import Login from "./pages/Login";
-import { useAuthStore } from "./store/authStore";
+import Dashboard from "@/pages/Dashboard";
+import Login from "@/pages/Login";
+import { useAuthStore } from "@/store/authStore";
 
 export default function App() {
   const authed = useAuthStore((s) => s.authed);

@@ -1,14 +1,14 @@
 import { useState } from "react";
 
-import type { Player } from "../api";
-import { deletePlayer, deleteTexture, textureUrl, updateSkinModel } from "../api";
-import { useAsyncAction } from "../hooks/useAsyncAction";
-import SkinPreview from "./SkinPreview";
-import Button from "./ui/Button";
-import ConfirmDialog from "./ui/ConfirmDialog";
-import Select from "./ui/Select";
-import UploadCapeDialog from "./UploadCapeDialog";
-import UploadSkinDialog from "./UploadSkinDialog";
+import type { Player } from "@/api";
+import { deletePlayer, deleteTexture, textureUrl, updateSkinModel } from "@/api";
+import SkinPreview from "@/components/SkinPreview";
+import Button from "@/components/ui/Button";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import Select from "@/components/ui/Select";
+import UploadCapeDialog from "@/components/UploadCapeDialog";
+import UploadSkinDialog from "@/components/UploadSkinDialog";
+import { useAsyncAction } from "@/hooks/useAsyncAction";
 
 interface Props {
   player: Player;

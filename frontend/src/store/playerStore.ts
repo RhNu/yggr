@@ -9,8 +9,9 @@ import {
   deleteTexture as apiDeleteTexture,
   type MeResponse,
   type Player,
-} from "../api";
-import { createLogger } from "../logger";
+} from "@/api";
+import { createLogger } from "@/logger";
+
 import { useAuthStore } from "./authStore";
 
 const log = createLogger("playerStore");

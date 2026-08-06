@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 
-import CreatePlayerDialog from "../components/CreatePlayerDialog";
-import PlayerCard from "../components/PlayerCard";
-import Button from "../components/ui/Button";
-import { useAuthStore } from "../store/authStore";
-import { usePlayerStore } from "../store/playerStore";
+import CreatePlayerDialog from "@/components/CreatePlayerDialog";
+import PlayerCard from "@/components/PlayerCard";
+import Button from "@/components/ui/Button";
+import { useAuthStore } from "@/store/authStore";
+import { usePlayerStore } from "@/store/playerStore";
 
 export default function Dashboard() {
   const { me, error, loading, refresh } = usePlayerStore();

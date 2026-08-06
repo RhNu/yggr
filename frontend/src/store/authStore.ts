@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
-import { createLogger } from "../logger";
+import { createLogger } from "@/logger";
 
 const log = createLogger("authStore");
 

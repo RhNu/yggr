@@ -82,5 +82,14 @@
   "env": {
     "browser": true
   },
+  "overrides": [
+    {
+      "files": ["vite.config.ts"],
+      "rules": {
+        "import/no-nodejs-modules": "off",
+        "unicorn/relative-url-style": "off"
+      }
+    }
+  ],
   "ignorePatterns": ["dist/", "node_modules/"]
 }

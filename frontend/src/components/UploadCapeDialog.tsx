@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 
-import { uploadTexture, textureUrl, type Player } from "../api";
-import { useAsyncAction } from "../hooks/useAsyncAction";
-import SkinPreview from "./SkinPreview";
-import Button from "./ui/Button";
-import Dialog from "./ui/Dialog";
-import Input from "./ui/Input";
+import { uploadTexture, textureUrl, type Player } from "@/api";
+import SkinPreview from "@/components/SkinPreview";
+import Button from "@/components/ui/Button";
+import Dialog from "@/components/ui/Dialog";
+import Input from "@/components/ui/Input";
+import { useAsyncAction } from "@/hooks/useAsyncAction";
 
 interface Props {
   open: boolean;

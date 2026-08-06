@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { SkinViewer } from "skinview3d";
 
-import { createLogger } from "../logger";
+import { createLogger } from "@/logger";
 
 const log = createLogger("SkinPreview");
 
