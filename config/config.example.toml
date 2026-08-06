@@ -1,7 +1,7 @@
 # yggr 配置示例 - 复制为 config.toml 后修改
 #
 # 目录结构:
-#   config/  配置文件(config.toml, seed.toml)
+#   config/  配置文件(config.toml, user.toml)
 #   data/    数据文件(数据库、密钥、材质)
 #
 # 环境变量覆盖(优先于配置文件):
@@ -31,7 +31,7 @@ dir = "data"
 
 [auth]
 # 角色 UUID 生成策略:offline(离线兼容)或 random(随机 v4)
-# seed.toml 中显式指定 uuid 的角色不受此影响
+# user.toml 中不再配置角色,登录后通过前端或 API 创建
 player_uuid_generation = "offline"
 
 # 令牌有效期(天)
@@ -53,9 +53,9 @@ check_ip = false
 # 每用户角色数量上限
 max_players_per_user = 5
 
-[seed]
-# 种子配置文件(启动时创建用户与角色); 相对路径基于配置目录; None 表示禁用
-file = "seed.toml"
+[user]
+# 用户配置文件(启动时创建允许登录的用户); 相对路径基于配置目录; None 表示禁用
+file = "user.toml"
 
 [meta]
 # 实现信息 (显示在 meta)

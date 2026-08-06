@@ -22,10 +22,10 @@
 ```bash
 cargo build --release
 
-# 配置与种子用户(参考示例文件)
+# 配置与用户(参考示例文件)
 cp config/config.example.toml config/config.toml
-cp config/seed.example.toml config/seed.toml
-# 编辑 config/seed.toml 设置你的邮箱/用户名与强密码
+cp config/user.example.toml config/user.toml
+# 编辑 config/user.toml 设置你的邮箱/用户名与强密码
 
 # 启动
 ./target/release/yggr
@@ -36,11 +36,11 @@ cp config/seed.example.toml config/seed.toml
 
 | 环境变量           | 默认     | 说明                          |
 | ------------------ | -------- | ----------------------------- |
-| `YGGR_CONFIG_DIR`  | `config` | 配置目录(config.toml, seed.toml) |
+| `YGGR_CONFIG_DIR`  | `config` | 配置目录(config.toml, user.toml) |
 | `YGGR_DATA_DIR`    | `data`   | 数据目录(数据库、密钥、材质)    |
 | `YGGR_FRONTEND_DIR`| `frontend/dist` | 前端静态文件目录              |
 
-启动时自动完成:生成 RSA 密钥(`data/private_key.pem`)-> 初始化 SQLite(`data/yggr.db`)-> 应用种子用户。
+启动时自动完成:生成 RSA 密钥(`data/private_key.pem`)-> 初始化 SQLite(`data/yggr.db`)-> 初始化用户。
 
 ## 客户端接入
 
@@ -74,7 +74,7 @@ cp config/seed.example.toml config/seed.toml
 见 [`config/config.example.toml`](config/config.example.toml),关键项:
 
 - `base_url`:外部访问地址,用于生成材质 URL(反代场景填 https 域名)
-- `player_uuid_generation`: `offline`(离线兼容)或 `random`;seed 中可逐角色指定 `uuid`
+- `player_uuid_generation`: `offline`(离线兼容)或 `random`;角色创建时使用 `uuid`
 - `non_email_login`: 允许角色名登录(自动绑定该角色)
 - `check_ip`: hasJoined 时校验 IP(反代需正确传 `X-Forwarded-For`)
 - `login_rate_limit_per_minute`: 登录/登出每 IP 限流
@@ -84,12 +84,12 @@ cp config/seed.example.toml config/seed.toml
 
 ## 用户与角色管理
 
-通过 [`config/seed.toml`](config/seed.example.toml) 在启动时创建用户、角色与初始皮肤/披风。已存在的用户/角色自动跳过;修改密码或新增角色后重启即可。
+通过 [`config/user.toml`](config/user.example.toml) 在启动时创建允许登录的用户。已存在的用户自动跳过;修改密码或新增用户后重启即可。角色登录后通过前端或 API 创建。
 
 ## 安全说明
 
 - 生产部署必须使用 HTTPS(建议反向代理终结 TLS)
-- `config/seed.toml` 含明文密码,请勿提交到版本库
+- `config/user.toml` 含明文密码,请勿提交到版本库
 - 材质上传已做 PNG 安全处理(尺寸上限 1024、重新编码去元数据),防止恶意材质
 
 ## 文档

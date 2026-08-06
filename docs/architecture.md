@@ -22,7 +22,7 @@ yggr 是一个用 Rust 编写的轻量级 Yggdrasil 认证服务端,目标为自
 | 材质系统  | 皮肤/披风上传与清除,PNG 安全校验(防 PNG bomb、去元数据重编码、22x17 披风补足),SHA-256 内容寻址存储 |
 | 元数据    | `GET /service` 返回 meta + skinDomains + signaturePublickey,含 ALI 头;根路径 `/` 返回 ALI 头       |
 | 消息签名  | `POST /service/minecraftservices/player/certificates`(Minecraft 1.19+,V1/V2 签名)                  |
-| 角色 UUID | 离线兼容 `MD5("OfflinePlayer:"+name)` 或随机 v4,亦可 seed 中手动指定                               |
+| 角色 UUID | 离线兼容 `MD5("OfflinePlayer:"+name)` 或随机 v4                               |
 | 安全      | 登录限流、argon2id 密码哈希、RSA-4096 自动生成密钥、可选暂时失效令牌                               |
 
 ---
@@ -124,16 +124,14 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TD
-    A[config/seed.toml 指定 uuid?] -->|是| B[直接使用, 校验合法性]
-    A -->|否| C{player_uuid_generation}
-    C -->|offline| D[MD5 离线兼容]
-    C -->|random| E[随机 UUID v4]
+    A[角色通过 API 创建] --> B{player_uuid_generation}
+    B -->|offline| D[MD5 离线兼容]
+    B -->|random| E[随机 UUID v4]
     D --> F[UUID.nameUUIDFromBytes 'OfflinePlayer:'+name]
 ```
 
 - **离线兼容**(默认):`MD5("OfflinePlayer:" + name)` 摘要后按 Java `UUID.nameUUIDFromBytes` 规则设置 version=3、IETF variant,输出无符号字符串。可无缝迁移离线服存档。
 - **随机**:UUID v4。
-- **手动指定**:config/seed.toml 中逐角色指定(支持带连字符格式,自动规范化)。
 
 ---
 
@@ -143,7 +141,7 @@ flowchart TD
 
 ```
 src/
-├── main.rs              服务入口:配置 → 数据库 → 密钥 → 种子 → HTTP 服务 + join 会话定期清理;Ctrl+C/SIGTERM 优雅退出
+├── main.rs              服务入口:配置 → 数据库 → 密钥 → 用户初始化 → HTTP 服务 + join 会话定期清理;Ctrl+C/SIGTERM 优雅退出
 ├── lib.rs               模块声明与分层 re-export(兼容旧路径);build_app 在 api 层
 ├── core/                基础设施层(无 HTTP 处理器,不依赖业务)
 │   ├── mod.rs           聚合导出(config/crypto/db/error/types)
@@ -155,10 +153,10 @@ src/
 │       ├── mod.rs       聚合导出(models/queries)
 │       ├── models.rs    User / Player / Token / TextureKind 数据模型
 │       └── queries.rs   Schema、初始化、用户/角色/令牌 CRUD
-├── app/                 应用服务层(共享状态、材质系统、种子初始化)
-│   ├── mod.rs           聚合导出(seed/state/textures)
+├── app/                 应用服务层(共享状态、材质系统、用户初始化)
+│   ├── mod.rs           聚合导出(user/state/textures)
 │   ├── state.rs         共享状态:AppState(池/密钥/会话缓存/限流器)、JoinRecord、RateLimiter
-│   ├── seed.rs          种子用户/角色/材质导入
+│   ├── user.rs          用户初始化(user.toml 创建允许登录的用户)
 │   └── textures/        材质系统
 │       ├── mod.rs       聚合导出(store/process/payload/defaults)
 │       ├── store.rs     内容寻址存储 data/textures/{sha256}.png
@@ -245,7 +243,7 @@ data/
 ```
 config/
 ├── config.toml       主配置文件
-└── seed.toml         种子用户/角色配置(可选)
+└── user.toml         用户配置(可选)
 ```
 
 ---
@@ -529,7 +527,7 @@ Minecraft 1.19+ 聊天消息签名(由 `feature.enable_profile_key: true` 开启
 ### 6.5 部署安全
 
 - **必须 HTTPS**:生产环境置于反向代理(Nginx/Caddy)之后,`base_url` 填 HTTPS 域名,代理透传 `X-Forwarded-For`。
-- `config/seed.toml` 含明文密码,勿提交版本库。
+- `config/user.toml` 含明文密码,勿提交版本库。
 - 密钥文件 `private_key.pem` 权限收紧,丢失即所有已签名属性失效。
 
 ---
@@ -586,8 +584,8 @@ sequenceDiagram
 | `login_rate_limit_per_minute`       | `10`                    | 每 IP 限流,0 禁用                  |
 | `check_ip`                          | `false`                 | hasJoined IP 校验                  |
 | `max_players_per_user`              | `5`                     | 每用户角色数量上限                  |
-| `[seed]`                            |                         | 种子配置                           |
-| `file`                              | `seed.toml`             | 种子配置,相对配置目录;`None` 禁用  |
+| `[user]`                            |                         | 用户配置                           |
+| `file`                              | `user.toml`             | 用户配置,相对配置目录;`None` 禁用  |
 | `[meta]`                            |                         | 实现信息                           |
 | `implementation_name`               | `yggr`                  | meta.implementationName            |
 | `implementation_version`            | 包版本                  | meta.implementationVersion         |

@@ -1,4 +1,4 @@
-//! yggr 服务入口:加载配置、初始化数据库/密钥/种子、启动 HTTP 服务
+//! yggr 服务入口:加载配置、初始化数据库/密钥/用户、启动 HTTP 服务
 
 use anyhow::Result;
 use rsa::{RsaPrivateKey, RsaPublicKey};
@@ -12,9 +12,9 @@ use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 use yggr::api::build_app;
-use yggr::app::seed;
 use yggr::app::state::{AppState, RateLimiter};
 use yggr::app::textures::{DefaultSkins, TextureStore};
+use yggr::app::user;
 use yggr::core::config::Config;
 use yggr::core::crypto;
 use yggr::core::db;
@@ -81,8 +81,8 @@ async fn main() -> Result<()> {
     let default_skins = DefaultSkins::init(&store)?;
     info!("default skins ready");
 
-    // 种子用户初始化
-    seed::apply_seed(&config, &pool, &store).await?;
+    // 用户初始化
+    user::apply_users(&config, &pool).await?;
 
     // 启动时清理过期令牌
     match db::delete_expired_tokens(&pool, crypto::now_millis()).await {

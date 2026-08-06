@@ -56,7 +56,7 @@ pub async fn setup() -> TestEnv {
             login_rate_limit_per_minute: 1000,
             ..Default::default()
         },
-        seed: yggr::core::config::SeedConfig { file: None },
+        user: yggr::core::config::UserConfig { file: None },
         ..Config::default()
     };
     let config = Arc::new(config);

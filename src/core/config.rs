@@ -91,18 +91,18 @@ impl Default for AuthConfig {
     }
 }
 
-/// [seed] 种子配置
+/// [user] 用户配置
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
-pub struct SeedConfig {
-    /// 种子配置文件,相对路径基于配置目录(config_dir)
+pub struct UserConfig {
+    /// 用户配置文件,相对路径基于配置目录(config_dir)
     pub file: Option<PathBuf>,
 }
 
-impl Default for SeedConfig {
+impl Default for UserConfig {
     fn default() -> Self {
         Self {
-            file: Some(PathBuf::from("seed.toml")),
+            file: Some(PathBuf::from("user.toml")),
         }
     }
 }
@@ -166,7 +166,7 @@ pub struct Config {
     pub server: ServerConfig,
     pub data: DataConfig,
     pub auth: AuthConfig,
-    pub seed: SeedConfig,
+    pub user: UserConfig,
     pub meta: MetaConfig,
     pub features: FeaturesConfig,
     pub frontend: FrontendConfig,
@@ -186,7 +186,7 @@ impl Config {
     ///
     /// - `YGGR_DATA_DIR` 覆盖 data.dir
     /// - `YGGR_FRONTEND_DIR` 覆盖 frontend.dir
-    /// - `seed.file` 相对路径基于 config_dir 解析
+    /// - `user.file` 相对路径基于 config_dir 解析
     pub fn resolve_paths(&mut self, config_dir: &Path) {
         if let Ok(data_dir) = std::env::var("YGGR_DATA_DIR") {
             self.data.dir = PathBuf::from(data_dir);
@@ -194,10 +194,10 @@ impl Config {
         if let Ok(frontend_dir) = std::env::var("YGGR_FRONTEND_DIR") {
             self.frontend.dir = Some(PathBuf::from(frontend_dir));
         }
-        if let Some(ref seed_file) = self.seed.file
-            && seed_file.is_relative()
+        if let Some(ref user_file) = self.user.file
+            && user_file.is_relative()
         {
-            self.seed.file = Some(config_dir.join(seed_file));
+            self.user.file = Some(config_dir.join(user_file));
         }
     }
 
