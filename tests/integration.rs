@@ -1,22 +1,22 @@
 //! 端到端集成测试:走通 Yggdrasil 全流程
 //! (meta → authenticate → validate → join → hasJoined → profile → 材质上传 → refresh → invalidate → signout)
 
-use axum::body::Body;
-use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
+use axum::body::Body;
+use axum::http::{Method, Request, StatusCode, header};
 use base64::Engine;
 use http_body_util::BodyExt;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 
-use yggr::build_app;
-use yggr::config::Config;
-use yggr::crypto;
-use yggr::db;
-use yggr::state::{AppState, RateLimiter};
-use yggr::textures::TextureStore;
+use yggr::api::build_app;
+use yggr::app::state::{AppState, RateLimiter};
+use yggr::app::textures::TextureStore;
+use yggr::core::config::Config;
+use yggr::core::crypto;
+use yggr::core::db;
 
 const TEST_PASSWORD: &str = "test-password-123";
 const PLAYER_NAME: &str = "Steve";
@@ -51,9 +51,17 @@ async fn setup() -> TestEnv {
         .await
         .unwrap();
     let player_id = crypto::offline_uuid(PLAYER_NAME);
-    db::create_player(&pool, &player_id, PLAYER_NAME, &user_id, None, None, "classic")
-        .await
-        .unwrap();
+    db::create_player(
+        &pool,
+        &player_id,
+        PLAYER_NAME,
+        &user_id,
+        None,
+        None,
+        "classic",
+    )
+    .await
+    .unwrap();
 
     let state = AppState {
         config,
@@ -166,10 +174,12 @@ async fn full_yggdrasil_flow() {
     // 1. meta
     let (status, meta) = call(app, Method::GET, "/", None, None).await;
     assert_eq!(status, StatusCode::OK);
-    assert!(meta["signaturePublickey"]
-        .as_str()
-        .unwrap()
-        .starts_with("-----BEGIN PUBLIC KEY-----"));
+    assert!(
+        meta["signaturePublickey"]
+            .as_str()
+            .unwrap()
+            .starts_with("-----BEGIN PUBLIC KEY-----")
+    );
     assert_eq!(meta["meta"]["implementationName"], "yggr");
     assert!(meta["skinDomains"].is_array());
 
@@ -355,7 +365,11 @@ async fn full_yggdrasil_flow() {
     let sig = base64::engine::general_purpose::STANDARD
         .decode(signature)
         .unwrap();
-    assert!(crypto::verify_sha1(&env.public_key, value_b64.as_bytes(), &sig));
+    assert!(crypto::verify_sha1(
+        &env.public_key,
+        value_b64.as_bytes(),
+        &sig
+    ));
 
     // 材质文件可下载
     let decoded: Value = serde_json::from_slice(
@@ -377,10 +391,7 @@ async fn full_yggdrasil_flow() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    assert_eq!(
-        res.headers()[header::CONTENT_TYPE],
-        "image/png"
-    );
+    assert_eq!(res.headers()[header::CONTENT_TYPE], "image/png");
 
     // 9. refresh
     let (status, refreshed) = call(
@@ -420,14 +431,13 @@ async fn full_yggdrasil_flow() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(!certs["keyPair"]["privateKey"]
-        .as_str()
-        .unwrap()
-        .is_empty());
-    assert!(!certs["keyPair"]["publicKeySignatureV2"]
-        .as_str()
-        .unwrap()
-        .is_empty());
+    assert!(!certs["keyPair"]["privateKey"].as_str().unwrap().is_empty());
+    assert!(
+        !certs["keyPair"]["publicKeySignatureV2"]
+            .as_str()
+            .unwrap()
+            .is_empty()
+    );
     assert!(certs["expiresAt"].as_str().unwrap().starts_with("20"));
 
     // 11. invalidate
@@ -490,6 +500,8 @@ async fn token_limit_revokes_oldest() {
         .await;
         assert_eq!(status, StatusCode::OK);
         tokens.push(res["accessToken"].as_str().unwrap().to_string());
+        // 保证 issued_at(毫秒)有区分度,使"吊销最旧"断言确定(避免同毫秒退化为随机排序)
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
     }
 
     // 最早颁发的令牌已被吊销(超限吊销最旧)

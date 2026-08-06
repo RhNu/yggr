@@ -6,11 +6,10 @@
 
 use axum::extract::State;
 use axum::http::HeaderMap;
-use axum::Json;
-use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use rand_core::OsRng;
-use rsa::pkcs1v15::{SigningKey, Signature};
+use rsa::pkcs1v15::{Signature, SigningKey};
 use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey};
 use rsa::signature::{SignatureEncoding, Signer};
 use rsa::{RsaPrivateKey, RsaPublicKey};
@@ -18,11 +17,11 @@ use serde::Serialize;
 use sha1::Sha1;
 use sha2::Sha256;
 
-use crate::auth::bearer_token;
-use crate::crypto::{millis_to_rfc3339, now_millis};
-use crate::error::{ApiError, ApiResult};
-use crate::state::AppState;
-use crate::types::JsonResponse;
+use crate::api::auth::bearer_token;
+use crate::app::state::AppState;
+use crate::core::crypto::{millis_to_rfc3339, now_millis};
+use crate::core::error::{ApiError, ApiResult};
+use crate::core::types::JsonResponse;
 
 /// 密钥对有效期(天)
 const KEY_VALIDITY_DAYS: i64 = 7;
@@ -58,7 +57,9 @@ pub async fn certificates(
     let tok = bearer_token(&state, &headers).await?;
     // 要求令牌已绑定角色(客户端在进服前获取证书)
     if tok.player_id.is_none() {
-        return Err(ApiError::bad_request("Access token has no profile assigned."));
+        return Err(ApiError::bad_request(
+            "Access token has no profile assigned.",
+        ));
     }
 
     // 生成短期密钥对

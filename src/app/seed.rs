@@ -6,12 +6,12 @@ use sqlx::SqlitePool;
 use std::path::PathBuf;
 use tracing::{info, warn};
 
-use crate::config::{Config, UuidGeneration};
-use crate::crypto::{hash_password, offline_uuid, random_uuid};
-use crate::db::{
-    create_player, create_user, get_player_by_name, get_user_by_username, TextureKind,
+use crate::app::textures::{TextureStore, import_texture_file};
+use crate::core::config::{Config, UuidGeneration};
+use crate::core::crypto::{hash_password, offline_uuid, random_uuid};
+use crate::core::db::{
+    TextureKind, create_player, create_user, get_player_by_name, get_user_by_username,
 };
-use crate::textures::{import_texture_file, TextureStore};
 
 #[derive(Debug, Deserialize)]
 pub struct SeedConfig {
@@ -52,11 +52,7 @@ fn default_model() -> String {
 }
 
 /// 应用种子配置:已存在的用户名/角色名跳过
-pub async fn apply_seed(
-    config: &Config,
-    pool: &SqlitePool,
-    store: &TextureStore,
-) -> Result<()> {
+pub async fn apply_seed(config: &Config, pool: &SqlitePool, store: &TextureStore) -> Result<()> {
     let Some(seed_path) = &config.seed_file else {
         return Ok(());
     };
@@ -70,7 +66,10 @@ pub async fn apply_seed(
         .with_context(|| format!("failed to parse seed file: {}", seed_path.display()))?;
 
     for user_cfg in &seed.users {
-        if get_user_by_username(pool, &user_cfg.username).await?.is_some() {
+        if get_user_by_username(pool, &user_cfg.username)
+            .await?
+            .is_some()
+        {
             info!("seed: user {} already exists, skipping", user_cfg.username);
             continue;
         }
@@ -88,10 +87,7 @@ pub async fn apply_seed(
 
         for player_cfg in &user_cfg.players {
             if get_player_by_name(pool, &player_cfg.name).await?.is_some() {
-                warn!(
-                    "seed: player {} already exists, skipping",
-                    player_cfg.name
-                );
+                warn!("seed: player {} already exists, skipping", player_cfg.name);
                 continue;
             }
             if player_cfg.skin_model != "classic" && player_cfg.skin_model != "slim" {

@@ -2,17 +2,17 @@
 //! - POST /api/profiles/minecraft 按名称批量查询角色
 //! - PUT/DELETE /api/user/profile/{uuid}/{skin|cape} 材质上传/清除
 
+use axum::Json;
 use axum::extract::{Multipart, Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
-use axum::Json;
 
-use crate::auth::bearer_token;
-use crate::db::{get_player_by_id, get_players_by_names, update_player_texture, TextureKind};
-use crate::error::{ApiError, ApiResult};
-use crate::state::AppState;
-use crate::textures::{pad_cape, sanitize_png};
-use crate::types::{JsonResponse, ProfileResponse};
+use crate::api::auth::bearer_token;
+use crate::app::state::AppState;
+use crate::app::textures::{pad_cape, sanitize_png};
+use crate::core::db::{TextureKind, get_player_by_id, get_players_by_names, update_player_texture};
+use crate::core::error::{ApiError, ApiResult};
+use crate::core::types::{JsonResponse, ProfileResponse};
 
 /// 单次批量查询的最大角色数(防 CC 攻击)
 const MAX_PROFILES_PER_REQUEST: usize = 100;
@@ -114,7 +114,12 @@ async fn upload_texture(
     {
         match field.name().unwrap_or("") {
             "model" => {
-                model = Some(field.text().await.map_err(|e| ApiError::bad_request(e.to_string()))?);
+                model = Some(
+                    field
+                        .text()
+                        .await
+                        .map_err(|e| ApiError::bad_request(e.to_string()))?,
+                );
             }
             "file" => {
                 let content_type = field.content_type().map(|s| s.to_string());
@@ -230,9 +235,5 @@ pub async fn texture_file(
     else {
         return Ok(StatusCode::NOT_FOUND.into_response());
     };
-    Ok((
-        [(axum::http::header::CONTENT_TYPE, "image/png")],
-        data,
-    )
-        .into_response())
+    Ok(([(axum::http::header::CONTENT_TYPE, "image/png")], data).into_response())
 }

@@ -6,10 +6,10 @@ use axum::http::HeaderName;
 use axum::response::IntoResponse;
 use serde::Serialize;
 
-use crate::crypto::public_key_pem;
-use crate::error::ApiResult;
-use crate::state::AppState;
-use crate::types::JsonResponse;
+use crate::app::state::AppState;
+use crate::core::crypto::public_key_pem;
+use crate::core::error::ApiResult;
+use crate::core::types::JsonResponse;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,7 +40,7 @@ struct MetaResponse {
 /// GET / — authlib-injector API 元数据
 pub async fn meta(State(state): State<AppState>) -> ApiResult<impl IntoResponse> {
     let pem = public_key_pem(&state.public_key)
-        .map_err(|e| crate::error::ApiError::internal(e.to_string()))?;
+        .map_err(|e| crate::core::error::ApiError::internal(e.to_string()))?;
 
     let response = MetaResponse {
         meta: Meta {
@@ -58,7 +58,10 @@ pub async fn meta(State(state): State<AppState>) -> ApiResult<impl IntoResponse>
     };
 
     Ok((
-        [(HeaderName::from_static("x-authlib-injector-api-location"), "/")],
+        [(
+            HeaderName::from_static("x-authlib-injector-api-location"),
+            "/",
+        )],
         JsonResponse(response),
     ))
 }

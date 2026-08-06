@@ -10,13 +10,13 @@ use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
-use yggr::build_app;
-use yggr::config::Config;
-use yggr::crypto;
-use yggr::db;
-use yggr::seed;
-use yggr::state::{AppState, RateLimiter};
-use yggr::textures::TextureStore;
+use yggr::api::build_app;
+use yggr::app::seed;
+use yggr::app::state::{AppState, RateLimiter};
+use yggr::app::textures::TextureStore;
+use yggr::core::config::Config;
+use yggr::core::crypto;
+use yggr::core::db;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -81,9 +81,7 @@ async fn main() -> Result<()> {
             loop {
                 interval.tick().await;
                 state.cleanup_sessions();
-                if let Err(e) =
-                    db::delete_expired_tokens(&state.pool, crypto::now_millis()).await
-                {
+                if let Err(e) = db::delete_expired_tokens(&state.pool, crypto::now_millis()).await {
                     warn!("failed to clean expired tokens: {e}");
                 }
             }

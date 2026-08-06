@@ -1,4 +1,4 @@
-//! 材质系统:PNG 安全校验、存储、textures 属性生成与签名
+//! PNG 处理:安全校验、清洗重编码、披风补足
 //!
 //! 安全要求(authlib-injector 规范):
 //! - 先读图像头获取尺寸,防止 PNG bomb 消耗内存
@@ -6,58 +6,13 @@
 //! - 重新编码 PNG 以去除与位图无关的数据(防隐藏恶意代码)
 
 use anyhow::{Context, Result};
-use base64::engine::general_purpose::STANDARD as BASE64;
-use base64::Engine;
 use png::{BitDepth, ColorType, Decoder, Encoder};
-use rsa::RsaPrivateKey;
-use serde::Serialize;
 use std::io::Cursor;
-use std::path::{Path, PathBuf};
 
-use crate::config::Config;
-use crate::crypto::{now_millis, sha256_hex, sign_sha1};
-use crate::db::{Player, TextureKind};
+use crate::core::db::TextureKind;
 
 /// 材质尺寸上限(像素),防止超大图像
 const MAX_TEXTURE_SIZE: u32 = 1024;
-
-/// 材质存储:data/textures/{sha256}.png
-#[derive(Clone)]
-pub struct TextureStore {
-    dir: PathBuf,
-}
-
-impl TextureStore {
-    pub fn new(data_dir: &Path) -> Result<Self> {
-        let dir = data_dir.join("textures");
-        std::fs::create_dir_all(&dir)
-            .with_context(|| format!("failed to create textures dir: {}", dir.display()))?;
-        Ok(TextureStore { dir })
-    }
-
-    /// 保存材质数据,返回 SHA-256 hash;已存在则直接返回 hash
-    pub fn save(&self, data: &[u8]) -> Result<String> {
-        let hash = sha256_hex(data);
-        let path = self.dir.join(format!("{}.png", hash));
-        if !path.exists() {
-            std::fs::write(&path, data)
-                .with_context(|| format!("failed to write texture: {}", path.display()))?;
-        }
-        Ok(hash)
-    }
-
-    /// 读取材质数据
-    pub fn load(&self, hash: &str) -> Result<Option<Vec<u8>>> {
-        let path = self.dir.join(format!("{}.png", hash));
-        if !path.exists() {
-            return Ok(None);
-        }
-        Ok(Some(
-            std::fs::read(&path)
-                .with_context(|| format!("failed to read texture: {}", path.display()))?,
-        ))
-    }
-}
 
 /// 校验并清洗 PNG:检查尺寸合法性、重编码去除无关数据,返回干净的 RGBA8 PNG
 pub fn sanitize_png(data: &[u8], kind: TextureKind) -> Result<Vec<u8>> {
@@ -72,12 +27,7 @@ pub fn sanitize_png(data: &[u8], kind: TextureKind) -> Result<Vec<u8>> {
         anyhow::bail!("invalid texture size: {}x{}", w, h);
     }
     if w > MAX_TEXTURE_SIZE || h > MAX_TEXTURE_SIZE {
-        anyhow::bail!(
-            "texture too large: {}x{} (max {})",
-            w,
-            h,
-            MAX_TEXTURE_SIZE
-        );
+        anyhow::bail!("texture too large: {}x{} (max {})", w, h, MAX_TEXTURE_SIZE);
     }
     validate_dimensions(w, h, kind)?;
 
@@ -199,71 +149,6 @@ pub fn pad_cape(data: &[u8]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-/// textures 属性值结构
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct TexturesPayload<'a> {
-    timestamp: i64,
-    profile_id: String,
-    profile_name: &'a str,
-    textures: serde_json::Map<String, serde_json::Value>,
-}
-
-/// 生成 Base64 编码的 textures 属性值(含 timestamp/profileId/profileName)
-pub fn build_textures_value(config: &Config, player: &Player) -> Result<String> {
-    let mut textures = serde_json::Map::new();
-    if let Some(skin_hash) = &player.skin_hash {
-        let mut skin = serde_json::Map::new();
-        skin.insert(
-            "url".to_string(),
-            serde_json::Value::String(format!("{}/textures/{}", config.base_url.trim_end_matches('/'), skin_hash)),
-        );
-        if player.skin_model == "slim" {
-            let mut metadata = serde_json::Map::new();
-            metadata.insert(
-                "model".to_string(),
-                serde_json::Value::String("slim".to_string()),
-            );
-            skin.insert("metadata".to_string(), serde_json::Value::Object(metadata));
-        }
-        textures.insert("SKIN".to_string(), serde_json::Value::Object(skin));
-    }
-    if let Some(cape_hash) = &player.cape_hash {
-        let mut cape = serde_json::Map::new();
-        cape.insert(
-            "url".to_string(),
-            serde_json::Value::String(format!("{}/textures/{}", config.base_url.trim_end_matches('/'), cape_hash)),
-        );
-        textures.insert("CAPE".to_string(), serde_json::Value::Object(cape));
-    }
-
-    let payload = TexturesPayload {
-        timestamp: now_millis(),
-        profile_id: player.id.clone(),
-        profile_name: &player.name,
-        textures,
-    };
-    let json = serde_json::to_string(&payload).context("failed to serialize textures payload")?;
-    Ok(BASE64.encode(json.as_bytes()))
-}
-
-/// 计算 textures 属性值的 SHA1withRSA 签名(Base64)
-pub fn sign_textures_value(key: &RsaPrivateKey, value: &str) -> Result<String> {
-    let sig = sign_sha1(key, value.as_bytes())?;
-    Ok(BASE64.encode(sig))
-}
-
-/// 导入材质文件(sanitize + 存储),返回 hash;22x17 披风自动补足
-pub fn import_texture_file(store: &TextureStore, path: &Path, kind: TextureKind) -> Result<String> {
-    let data = std::fs::read(path)
-        .with_context(|| format!("failed to read texture file: {}", path.display()))?;
-    let mut clean = sanitize_png(&data, kind)?;
-    if kind == TextureKind::Cape {
-        clean = pad_cape(&clean)?;
-    }
-    store.save(&clean)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -274,7 +159,11 @@ mod tests {
         let mut out = Vec::new();
         {
             let mut encoder = Encoder::new(&mut out, w, h);
-            encoder.set_color(if rgba { ColorType::Rgba } else { ColorType::Rgb });
+            encoder.set_color(if rgba {
+                ColorType::Rgba
+            } else {
+                ColorType::Rgb
+            });
             encoder.set_depth(BitDepth::Eight);
             let mut writer = encoder.write_header().unwrap();
             let total = (w * h) as usize * if rgba { 4 } else { 3 };
@@ -338,27 +227,5 @@ mod tests {
         let png = make_png(64, 32, true);
         let clean = sanitize_png(&png, TextureKind::Skin).unwrap();
         assert!(clean.len() <= png.len() + 64); // 重编码体积合理
-    }
-
-    #[test]
-    fn test_textures_value() {
-        let config = Config::default();
-        let player = Player {
-            id: "5627dd98e6be3c21b8a8e92344183641".to_string(),
-            name: "Steve".to_string(),
-            user_id: "u1".to_string(),
-            skin_hash: Some("abc123".to_string()),
-            cape_hash: None,
-            skin_model: "slim".to_string(),
-        };
-        let value = build_textures_value(&config, &player).unwrap();
-        let decoded = BASE64.decode(&value).unwrap();
-        let json: serde_json::Value = serde_json::from_slice(&decoded).unwrap();
-        assert_eq!(json["profileName"], "Steve");
-        assert_eq!(json["textures"]["SKIN"]["metadata"]["model"], "slim");
-        assert!(json["textures"]["SKIN"]["url"]
-            .as_str()
-            .unwrap()
-            .ends_with("/textures/abc123"));
     }
 }

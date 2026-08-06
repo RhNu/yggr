@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use time::OffsetDateTime;
 
-use crate::config::Config;
-use crate::textures::TextureStore;
+use crate::app::textures::TextureStore;
+use crate::core::config::Config;
 
 /// hasJoined 会话记录(join 后短暂有效)
 #[derive(Debug, Clone)]

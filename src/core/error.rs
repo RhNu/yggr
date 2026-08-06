@@ -77,7 +77,11 @@ impl ApiError {
 
     /// 内部错误(500)
     pub fn internal(message: impl Into<String>) -> Self {
-        Self::new(StatusCode::INTERNAL_SERVER_ERROR, "InternalServerError", message)
+        Self::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "InternalServerError",
+            message,
+        )
     }
 }
 

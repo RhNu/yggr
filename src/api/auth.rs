@@ -6,19 +6,19 @@
 //! - POST /authserver/signout 登出
 
 use axum::extract::{ConnectInfo, Json, State};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, header};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::net::{IpAddr, SocketAddr};
 
-use crate::crypto::{now_millis, random_token, random_uuid, verify_password};
-use crate::db::{
-    create_token, delete_token, delete_tokens_by_user, enforce_token_limit, get_player_by_id,
-    get_players_by_user, get_token, get_user_by_id, get_user_by_username, Token,
+use crate::app::state::AppState;
+use crate::core::crypto::{now_millis, random_token, random_uuid, verify_password};
+use crate::core::db::{
+    Token, create_token, delete_token, delete_tokens_by_user, enforce_token_limit,
+    get_player_by_id, get_players_by_user, get_token, get_user_by_id, get_user_by_username,
 };
-use crate::error::{ApiError, ApiResult};
-use crate::state::AppState;
-use crate::types::{JsonResponse, ProfileResponse, UserResponse};
+use crate::core::error::{ApiError, ApiResult};
+use crate::core::types::{JsonResponse, ProfileResponse, UserResponse};
 
 /// 每个用户同时有效的令牌数上限(规范建议,如 10);超限吊销最旧的
 const MAX_TOKENS_PER_USER: usize = 10;
@@ -34,10 +34,7 @@ fn token_valid(tok: &Token) -> bool {
 
 /// 从请求提取客户端 IP(优先 X-Forwarded-For,用于反代场景)
 pub fn client_ip(headers: &HeaderMap, addr: SocketAddr) -> IpAddr {
-    if let Some(xff) = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-    {
+    if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
         if let Some(first) = xff.split(',').next() {
             if let Ok(ip) = first.trim().parse() {
                 return ip;
@@ -155,7 +152,7 @@ pub async fn authenticate(
     {
         u
     } else if state.config.non_email_login {
-        match crate::db::get_player_by_name(pool, &req.username)
+        match crate::core::db::get_player_by_name(pool, &req.username)
             .await
             .map_err(db_err)?
         {
@@ -177,9 +174,7 @@ pub async fn authenticate(
     }
 
     // 角色绑定规则:角色名登录绑定该角色;仅一个角色自动绑定;多角色由客户端选择
-    let players = get_players_by_user(pool, &user.id)
-        .await
-        .map_err(db_err)?;
+    let players = get_players_by_user(pool, &user.id).await.map_err(db_err)?;
     let selected = if let Some(p) = &login_player {
         Some(p.clone())
     } else if players.len() == 1 {
@@ -276,7 +271,9 @@ pub async fn refresh(
     .await
     .map_err(db_err)?;
     // 新令牌已成功创建,现在吊销原令牌
-    delete_token(pool, &tok.access_token).await.map_err(db_err)?;
+    delete_token(pool, &tok.access_token)
+        .await
+        .map_err(db_err)?;
     // 令牌数量上限兜底(数量不变,防御性调用)
     enforce_token_limit(pool, &tok.user_id, MAX_TOKENS_PER_USER)
         .await

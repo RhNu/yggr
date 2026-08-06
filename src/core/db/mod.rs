@@ -1,37 +1,12 @@
-//! SQLite 数据库初始化与数据模型
+//! SQLite 数据层:Schema 初始化与用户/角色/令牌查询
 
 use anyhow::{Context, Result};
+use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use sqlx::{FromRow, SqlitePool};
 use std::path::Path;
 
-#[derive(Debug, Clone, FromRow)]
-pub struct User {
-    pub id: String,
-    pub username: String,
-    pub password_hash: String,
-    pub preferred_language: String,
-}
-
-#[derive(Debug, Clone, FromRow)]
-pub struct Player {
-    pub id: String,
-    pub name: String,
-    pub user_id: String,
-    pub skin_hash: Option<String>,
-    pub cape_hash: Option<String>,
-    pub skin_model: String,
-}
-
-#[derive(Debug, Clone, FromRow)]
-pub struct Token {
-    pub access_token: String,
-    pub client_token: String,
-    pub user_id: String,
-    pub player_id: Option<String>,
-    pub issued_at: i64,
-    pub expires_at: i64,
-}
+mod models;
+pub use models::{Player, TextureKind, Token, User};
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS users (
@@ -92,17 +67,21 @@ pub async fn init_db(path: &Path) -> Result<SqlitePool> {
 // ---- 用户 ----
 
 pub async fn get_user_by_username(pool: &SqlitePool, username: &str) -> Result<Option<User>> {
-    Ok(sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = ?")
-        .bind(username)
-        .fetch_optional(pool)
-        .await?)
+    Ok(
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = ?")
+            .bind(username)
+            .fetch_optional(pool)
+            .await?,
+    )
 }
 
 pub async fn get_user_by_id(pool: &SqlitePool, id: &str) -> Result<Option<User>> {
-    Ok(sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = ?")
-        .bind(id)
-        .fetch_optional(pool)
-        .await?)
+    Ok(
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?,
+    )
 }
 
 pub async fn create_user(
@@ -127,26 +106,30 @@ pub async fn create_user(
 // ---- 角色 ----
 
 pub async fn get_player_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Player>> {
-    Ok(sqlx::query_as::<_, Player>("SELECT * FROM players WHERE id = ?")
-        .bind(id)
-        .fetch_optional(pool)
-        .await?)
+    Ok(
+        sqlx::query_as::<_, Player>("SELECT * FROM players WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?,
+    )
 }
 
 pub async fn get_player_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Player>> {
-    Ok(sqlx::query_as::<_, Player>("SELECT * FROM players WHERE name = ?")
-        .bind(name)
-        .fetch_optional(pool)
-        .await?)
+    Ok(
+        sqlx::query_as::<_, Player>("SELECT * FROM players WHERE name = ?")
+            .bind(name)
+            .fetch_optional(pool)
+            .await?,
+    )
 }
 
 pub async fn get_players_by_user(pool: &SqlitePool, user_id: &str) -> Result<Vec<Player>> {
-    Ok(sqlx::query_as::<_, Player>(
-        "SELECT * FROM players WHERE user_id = ? ORDER BY name",
+    Ok(
+        sqlx::query_as::<_, Player>("SELECT * FROM players WHERE user_id = ? ORDER BY name")
+            .bind(user_id)
+            .fetch_all(pool)
+            .await?,
     )
-    .bind(user_id)
-    .fetch_all(pool)
-    .await?)
 }
 
 pub async fn create_player(
@@ -184,7 +167,11 @@ pub async fn update_player_texture(
         TextureKind::Cape => "cape_hash",
     };
     let sql = format!("UPDATE players SET {} = ? WHERE id = ?", column);
-    sqlx::query(&sql).bind(hash).bind(player_id).execute(pool).await?;
+    sqlx::query(&sql)
+        .bind(hash)
+        .bind(player_id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -202,10 +189,12 @@ pub async fn get_players_by_names(pool: &SqlitePool, names: &[String]) -> Result
 // ---- 令牌 ----
 
 pub async fn get_token(pool: &SqlitePool, access_token: &str) -> Result<Option<Token>> {
-    Ok(sqlx::query_as::<_, Token>("SELECT * FROM tokens WHERE access_token = ?")
-        .bind(access_token)
-        .fetch_optional(pool)
-        .await?)
+    Ok(
+        sqlx::query_as::<_, Token>("SELECT * FROM tokens WHERE access_token = ?")
+            .bind(access_token)
+            .fetch_optional(pool)
+            .await?,
+    )
 }
 
 pub async fn create_token(
@@ -288,20 +277,4 @@ pub async fn delete_expired_tokens(pool: &SqlitePool, now: i64) -> Result<u64> {
         .execute(pool)
         .await?
         .rows_affected())
-}
-
-/// 材质类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TextureKind {
-    Skin,
-    Cape,
-}
-
-impl TextureKind {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            TextureKind::Skin => "skin",
-            TextureKind::Cape => "cape",
-        }
-    }
 }

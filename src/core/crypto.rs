@@ -3,11 +3,11 @@
 use anyhow::{Context, Result};
 use argon2::password_hash::rand_core::OsRng;
 use argon2::{
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
-use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use md5::Md5;
 use rand::RngCore;
 use rsa::pkcs1v15::{SigningKey, VerifyingKey};
@@ -43,7 +43,9 @@ pub fn load_or_generate_key(path: &Path) -> Result<(RsaPrivateKey, RsaPublicKey)
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("failed to create dir: {}", parent.display()))?;
         }
-        let pem = private.to_pkcs8_pem(LineEnding::LF).context("key to PEM failed")?;
+        let pem = private
+            .to_pkcs8_pem(LineEnding::LF)
+            .context("key to PEM failed")?;
         std::fs::write(path, pem.as_bytes())
             .with_context(|| format!("failed to write key file: {}", path.display()))?;
         Ok((private, public))
@@ -127,7 +129,8 @@ pub fn random_token() -> String {
 
 /// 当前 Unix 毫秒时间戳(Java 时间戳格式)
 pub fn now_millis() -> i64 {
-    OffsetDateTime::now_utc().unix_timestamp() * 1000
+    let now = OffsetDateTime::now_utc();
+    now.unix_timestamp() * 1000 + now.millisecond() as i64
 }
 
 /// 以毫秒为单位的时间字符串,用于 RFC3339 输出(如 certificates 的 expiresAt)
@@ -137,7 +140,10 @@ pub fn millis_to_rfc3339(millis: i64) -> String {
     OffsetDateTime::from_unix_timestamp(secs)
         .map(|dt| dt + time::Duration::nanoseconds(nanos as i64))
         .ok()
-        .and_then(|dt| dt.format(&time::format_description::well_known::Rfc3339).ok())
+        .and_then(|dt| {
+            dt.format(&time::format_description::well_known::Rfc3339)
+                .ok()
+        })
         .unwrap_or_else(String::new)
 }
 
