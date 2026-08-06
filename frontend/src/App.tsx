@@ -1,11 +1,11 @@
-import { Route, Switch, useLocation } from "wouter";
-import Login from "./pages/Login";
+import { Route, Switch } from "wouter";
+
 import Dashboard from "./pages/Dashboard";
+import Login from "./pages/Login";
 import { useAuthStore } from "./store/authStore";
 
 export default function App() {
   const authed = useAuthStore((s) => s.authed);
-  const [, navigate] = useLocation();
 
   if (!authed) {
     return <Login />;
@@ -13,8 +13,8 @@ export default function App() {
 
   return (
     <Switch>
-      <Route path="/login" component={() => <Login />} />
-      <Route path="/" component={() => <Dashboard />} />
+      <Route path="/login" component={Login} />
+      <Route path="/" component={Dashboard} />
       <Route>
         <Dashboard />
       </Route>

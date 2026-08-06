@@ -15,16 +15,14 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       clientToken: null,
       authed: false,
-      setAuth: (token, clientToken) =>
-        set({ token, clientToken, authed: true }),
-      logout: () =>
-        set({ token: null, clientToken: null, authed: false }),
+      setAuth: (token, clientToken) => set({ token, clientToken, authed: true }),
+      logout: () => set({ token: null, clientToken: null, authed: false }),
     }),
     {
       name: "yggr-auth",
       storage: createJSONStorage(() => localStorage),
-    }
-  )
+    },
+  ),
 );
 
 export function getToken(): string | null {

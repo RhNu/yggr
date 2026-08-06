@@ -1,18 +1,14 @@
 import { useState } from "react";
+
 import type { Player } from "../api";
-import {
-  deletePlayer,
-  deleteTexture,
-  textureUrl,
-  updateSkinModel,
-} from "../api";
-import SkinPreview from "./SkinPreview";
-import UploadSkinDialog from "./UploadSkinDialog";
-import UploadCapeDialog from "./UploadCapeDialog";
-import ConfirmDialog from "./ui/ConfirmDialog";
-import Button from "./ui/Button";
-import Select from "./ui/Select";
+import { deletePlayer, deleteTexture, textureUrl, updateSkinModel } from "../api";
 import { useAsyncAction } from "../hooks/useAsyncAction";
+import SkinPreview from "./SkinPreview";
+import Button from "./ui/Button";
+import ConfirmDialog from "./ui/ConfirmDialog";
+import Select from "./ui/Select";
+import UploadCapeDialog from "./UploadCapeDialog";
+import UploadSkinDialog from "./UploadSkinDialog";
 
 interface Props {
   player: Player;
@@ -49,15 +45,10 @@ export default function PlayerCard({ player, onChanged }: Props) {
   const capeUrl = player.cape_hash ? textureUrl(player.cape_hash) : null;
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-md p-4">
-      <div className="flex items-center justify-between mb-3">
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md">
+      <div className="mb-3 flex items-center justify-between">
         <h3 className="text-base font-medium text-neutral-100">{player.name}</h3>
-        <Button
-          variant="danger"
-          size="sm"
-          onClick={() => setShowDelete(true)}
-          disabled={busy}
-        >
+        <Button variant="danger" size="sm" onClick={() => setShowDelete(true)} disabled={busy}>
           Delete
         </Button>
       </div>
@@ -68,24 +59,22 @@ export default function PlayerCard({ player, onChanged }: Props) {
         skinModel={player.skin_model as "classic" | "slim"}
       />
 
-      {error && (
-        <p className="text-sm text-red-400 mb-3">{error}</p>
-      )}
+      {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
 
-      <div className="flex items-center gap-2 mb-3">
+      <div className="mb-3 flex items-center gap-2">
         <span className="text-xs text-neutral-500">Model:</span>
         <Select
           value={player.skin_model}
           onChange={(e) => handleModelChange(e.target.value)}
           disabled={busy}
-          className="w-auto py-1 px-2 text-xs"
+          className="w-auto px-2 py-1 text-xs"
         >
           <option value="classic">Classic</option>
           <option value="slim">Slim</option>
         </Select>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-2">
+      <div className="mb-2 flex flex-wrap gap-2">
         <Button
           variant="secondary"
           size="sm"

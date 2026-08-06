@@ -64,7 +64,7 @@ export default function SkinPreview({ skinUrl, capeUrl, skinModel }: Props) {
   return (
     <div
       ref={containerRef}
-      className="w-full h-[300px] flex items-center justify-center rounded-md bg-white/5 mb-3"
+      className="mb-3 flex h-[300px] w-full items-center justify-center rounded-md bg-white/5"
     />
   );
 }

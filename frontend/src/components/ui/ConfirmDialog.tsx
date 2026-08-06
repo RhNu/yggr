@@ -1,5 +1,5 @@
-import Dialog from "./Dialog";
 import Button from "./Button";
+import Dialog from "./Dialog";
 
 interface Props {
   open: boolean;

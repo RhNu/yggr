@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import Dialog from "./ui/Dialog";
-import Button from "./ui/Button";
-import Input from "./ui/Input";
-import SkinPreview from "./SkinPreview";
-import { useAsyncAction } from "../hooks/useAsyncAction";
+
 import { uploadTexture, textureUrl, type Player } from "../api";
+import { useAsyncAction } from "../hooks/useAsyncAction";
+import SkinPreview from "./SkinPreview";
+import Button from "./ui/Button";
+import Dialog from "./ui/Dialog";
+import Input from "./ui/Input";
 
 interface Props {
   open: boolean;
@@ -13,12 +14,7 @@ interface Props {
   onChanged: () => void;
 }
 
-export default function UploadCapeDialog({
-  open,
-  player,
-  onClose,
-  onChanged,
-}: Props) {
+export default function UploadCapeDialog({ open, player, onClose, onChanged }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const { busy, error, run } = useAsyncAction();
@@ -58,9 +54,7 @@ export default function UploadCapeDialog({
   const currentSkinUrl = player.skin_hash
     ? textureUrl(player.skin_hash)
     : `/service/textures/default/${player.skin_model}`;
-  const currentCapeUrl = player.cape_hash
-    ? textureUrl(player.cape_hash)
-    : null;
+  const currentCapeUrl = player.cape_hash ? textureUrl(player.cape_hash) : null;
 
   return (
     <Dialog
@@ -69,27 +63,18 @@ export default function UploadCapeDialog({
       onClose={onClose}
       footer={
         <>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onClose}
-            disabled={busy}
-          >
+          <Button variant="secondary" size="sm" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button
-            size="sm"
-            onClick={handleConfirm}
-            disabled={busy || !file}
-          >
+          <Button size="sm" onClick={handleConfirm} disabled={busy || !file}>
             {busy ? "..." : "Confirm Upload"}
           </Button>
         </>
       }
     >
-      <div className="flex gap-4 mb-4">
+      <div className="mb-4 flex gap-4">
         <div className="flex-1">
-          <label className="block text-xs text-neutral-500 mb-1.5">Current</label>
+          <span className="mb-1.5 block text-xs text-neutral-500">Current</span>
           <SkinPreview
             skinUrl={currentSkinUrl}
             capeUrl={currentCapeUrl}
@@ -97,7 +82,7 @@ export default function UploadCapeDialog({
           />
         </div>
         <div className="flex-1">
-          <label className="block text-xs text-neutral-500 mb-1.5">New</label>
+          <span className="mb-1.5 block text-xs text-neutral-500">New</span>
           <SkinPreview
             skinUrl={currentSkinUrl}
             capeUrl={previewUrl}
@@ -106,12 +91,7 @@ export default function UploadCapeDialog({
         </div>
       </div>
 
-      <Input
-        label="Cape File"
-        type="file"
-        accept="image/png"
-        onChange={handleFileSelect}
-      />
+      <Input label="Cape File" type="file" accept="image/png" onChange={handleFileSelect} />
 
       {error && <p className="text-sm text-red-400">{error}</p>}
     </Dialog>

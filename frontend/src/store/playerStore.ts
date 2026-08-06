@@ -1,4 +1,5 @@
 import { create } from "zustand";
+
 import {
   fetchMe,
   createPlayer as apiCreatePlayer,
@@ -19,16 +20,9 @@ interface PlayerState {
   addPlayer: (name: string, model: string) => Promise<boolean>;
   removePlayer: (id: string) => Promise<boolean>;
   setSkinModel: (id: string, model: string) => Promise<boolean>;
-  uploadSkin: (
-    playerId: string,
-    file: File,
-    model?: string
-  ) => Promise<boolean>;
+  uploadSkin: (playerId: string, file: File, model?: string) => Promise<boolean>;
   uploadCape: (playerId: string, file: File) => Promise<boolean>;
-  removeTexture: (
-    playerId: string,
-    type: "skin" | "cape"
-  ) => Promise<boolean>;
+  removeTexture: (playerId: string, type: "skin" | "cape") => Promise<boolean>;
   clear: () => void;
 }
 
@@ -43,10 +37,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const data = await fetchMe();
       set({ me: data, loading: false });
     } catch (err) {
-      if (
-        err instanceof Error &&
-        err.message.includes("Unauthorized")
-      ) {
+      if (err instanceof Error && err.message.includes("Unauthorized")) {
         useAuthStore.getState().logout();
         set({ me: null, loading: false });
         return;
@@ -94,9 +85,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         set({
           me: {
             ...me,
-            players: me.players.map((p) =>
-              p.id === id ? { ...p, skin_model: model } : p
-            ),
+            players: me.players.map((p) => (p.id === id ? { ...p, skin_model: model } : p)),
           },
         });
       }
@@ -140,7 +129,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
                     ...p,
                     [type === "skin" ? "skin_hash" : "cape_hash"]: null,
                   }
-                : p
+                : p,
             ) as Player[],
           },
         });

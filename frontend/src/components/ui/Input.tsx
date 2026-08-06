@@ -10,16 +10,13 @@ export default function Input({ label, className = "", id, ...props }: Props) {
   return (
     <div className="mb-4">
       {label && (
-        <label
-          htmlFor={inputId}
-          className="block mb-1.5 text-xs text-neutral-500"
-        >
+        <label htmlFor={inputId} className="mb-1.5 block text-xs text-neutral-500">
           {label}
         </label>
       )}
       <input
         id={inputId}
-        className={`w-full rounded-md bg-white/5 border border-white/10 px-3 py-2 text-sm text-neutral-100 outline-none transition-colors focus:border-white/25 placeholder:text-neutral-600 ${className}`}
+        className={`w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-neutral-100 transition-colors outline-none placeholder:text-neutral-600 focus:border-white/25 ${className}`}
         {...props}
       />
     </div>

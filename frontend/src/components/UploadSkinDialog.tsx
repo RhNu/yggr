@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import Dialog from "./ui/Dialog";
+
+import { uploadTexture, textureUrl, type Player } from "../api";
+import { useAsyncAction } from "../hooks/useAsyncAction";
+import SkinPreview from "./SkinPreview";
 import Button from "./ui/Button";
+import Dialog from "./ui/Dialog";
 import Input from "./ui/Input";
 import Select from "./ui/Select";
-import SkinPreview from "./SkinPreview";
-import { useAsyncAction } from "../hooks/useAsyncAction";
-import { uploadTexture, textureUrl, type Player } from "../api";
 
 interface Props {
   open: boolean;
@@ -14,12 +15,7 @@ interface Props {
   onChanged: () => void;
 }
 
-export default function UploadSkinDialog({
-  open,
-  player,
-  onClose,
-  onChanged,
-}: Props) {
+export default function UploadSkinDialog({ open, player, onClose, onChanged }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [model, setModel] = useState(player.skin_model);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -51,9 +47,7 @@ export default function UploadSkinDialog({
 
   const handleConfirm = async () => {
     if (!file) return;
-    const result = await run(() =>
-      uploadTexture(player.id, "skin", file, model)
-    );
+    const result = await run(() => uploadTexture(player.id, "skin", file, model));
     if (result !== null) {
       onClose();
       onChanged();
@@ -71,53 +65,32 @@ export default function UploadSkinDialog({
       onClose={onClose}
       footer={
         <>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onClose}
-            disabled={busy}
-          >
+          <Button variant="secondary" size="sm" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button
-            size="sm"
-            onClick={handleConfirm}
-            disabled={busy || !file}
-          >
+          <Button size="sm" onClick={handleConfirm} disabled={busy || !file}>
             {busy ? "..." : "Confirm Upload"}
           </Button>
         </>
       }
     >
-      <div className="flex gap-4 mb-4">
+      <div className="mb-4 flex gap-4">
         <div className="flex-1">
-          <label className="block text-xs text-neutral-500 mb-1.5">Current</label>
+          <span className="mb-1.5 block text-xs text-neutral-500">Current</span>
           <SkinPreview
             skinUrl={currentSkinUrl}
             skinModel={player.skin_model as "classic" | "slim"}
           />
         </div>
         <div className="flex-1">
-          <label className="block text-xs text-neutral-500 mb-1.5">New</label>
-          <SkinPreview
-            skinUrl={previewUrl}
-            skinModel={model as "classic" | "slim"}
-          />
+          <span className="mb-1.5 block text-xs text-neutral-500">New</span>
+          <SkinPreview skinUrl={previewUrl} skinModel={model as "classic" | "slim"} />
         </div>
       </div>
 
-      <Input
-        label="Skin File"
-        type="file"
-        accept="image/png"
-        onChange={handleFileSelect}
-      />
+      <Input label="Skin File" type="file" accept="image/png" onChange={handleFileSelect} />
 
-      <Select
-        label="Model"
-        value={model}
-        onChange={(e) => setModel(e.target.value)}
-      >
+      <Select label="Model" value={model} onChange={(e) => setModel(e.target.value)}>
         <option value="classic">Classic</option>
         <option value="slim">Slim</option>
       </Select>

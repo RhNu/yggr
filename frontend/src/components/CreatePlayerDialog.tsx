@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import Dialog from "./ui/Dialog";
+
+import { createPlayer } from "../api";
+import { useAsyncAction } from "../hooks/useAsyncAction";
 import Button from "./ui/Button";
+import Dialog from "./ui/Dialog";
 import Input from "./ui/Input";
 import Select from "./ui/Select";
-import { useAsyncAction } from "../hooks/useAsyncAction";
-import { createPlayer } from "../api";
 
 interface Props {
   open: boolean;
@@ -12,11 +13,7 @@ interface Props {
   onCreated: () => void;
 }
 
-export default function CreatePlayerDialog({
-  open,
-  onClose,
-  onCreated,
-}: Props) {
+export default function CreatePlayerDialog({ open, onClose, onCreated }: Props) {
   const [name, setName] = useState("");
   const [model, setModel] = useState("classic");
   const { busy, error, run } = useAsyncAction();
@@ -43,19 +40,10 @@ export default function CreatePlayerDialog({
       onClose={onClose}
       footer={
         <>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onClose}
-            disabled={busy}
-          >
+          <Button variant="secondary" size="sm" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button
-            size="sm"
-            onClick={handleSubmit}
-            disabled={busy || !name.trim()}
-          >
+          <Button size="sm" onClick={handleSubmit} disabled={busy || !name.trim()}>
             {busy ? "..." : "Add"}
           </Button>
         </>
@@ -70,11 +58,7 @@ export default function CreatePlayerDialog({
         maxLength={16}
         autoFocus
       />
-      <Select
-        label="Model"
-        value={model}
-        onChange={(e) => setModel(e.target.value)}
-      >
+      <Select label="Model" value={model} onChange={(e) => setModel(e.target.value)}>
         <option value="classic">Classic</option>
         <option value="slim">Slim</option>
       </Select>

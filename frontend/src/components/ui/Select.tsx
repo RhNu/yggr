@@ -10,16 +10,13 @@ export default function Select({ label, className = "", id, children, ...props }
   return (
     <div className="mb-4">
       {label && (
-        <label
-          htmlFor={selectId}
-          className="block mb-1.5 text-xs text-neutral-500"
-        >
+        <label htmlFor={selectId} className="mb-1.5 block text-xs text-neutral-500">
           {label}
         </label>
       )}
       <select
         id={selectId}
-        className={`w-full rounded-md bg-neutral-900 border border-white/10 px-3 py-2 text-sm text-neutral-100 outline-none transition-colors focus:border-white/25 ${className}`}
+        className={`w-full rounded-md border border-white/10 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 transition-colors outline-none focus:border-white/25 ${className}`}
         {...props}
       >
         {children}

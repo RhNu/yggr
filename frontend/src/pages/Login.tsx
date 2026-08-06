@@ -1,8 +1,9 @@
 import { useState } from "react";
+
 import { login } from "../api";
-import { useAuthStore } from "../store/authStore";
-import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
+import { useAuthStore } from "../store/authStore";
 
 export default function Login() {
   const setAuth = useAuthStore((s) => s.setAuth);
@@ -26,11 +27,9 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-xl border border-white/10 bg-neutral-900/60 backdrop-blur-md p-8 shadow-2xl">
-        <h1 className="text-2xl font-bold text-center text-neutral-100 mb-8">
-          YggR
-        </h1>
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="w-full max-w-sm rounded-xl border border-white/10 bg-neutral-900/60 p-8 shadow-2xl backdrop-blur-md">
+        <h1 className="mb-8 text-center text-2xl font-bold text-neutral-100">YggR</h1>
         <form onSubmit={handleSubmit}>
           <Input
             label="Username"
@@ -47,14 +46,8 @@ export default function Login() {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          {error && (
-            <p className="text-sm text-red-400 mb-4">{error}</p>
-          )}
-          <Button
-            type="submit"
-            disabled={loading}
-            className="w-full"
-          >
+          {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
+          <Button type="submit" disabled={loading} className="w-full">
             {loading ? "..." : "Login"}
           </Button>
         </form>

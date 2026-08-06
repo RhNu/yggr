@@ -6,7 +6,11 @@
     "dev": "node dev.mjs",
     "dev:frontend": "pnpm --filter frontend dev",
     "build": "pnpm --filter frontend build",
-    "preview": "pnpm --filter frontend preview"
+    "preview": "pnpm --filter frontend preview",
+    "lint": "pnpm --filter frontend lint",
+    "lint:fix": "pnpm --filter frontend lint:fix",
+    "format": "pnpm --filter frontend format",
+    "format:check": "pnpm --filter frontend format:check"
   },
   "engines": {
     "node": ">=22.12.0"

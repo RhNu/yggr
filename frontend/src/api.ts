@@ -45,7 +45,7 @@ export interface MeResponse {
 
 export async function login(
   username: string,
-  password: string
+  password: string,
 ): Promise<{ access_token: string; client_token: string }> {
   const data = await request("/service/authserver/authenticate", {
     method: "POST",
@@ -62,10 +62,7 @@ export async function fetchMe(): Promise<MeResponse> {
   return request("/api/me");
 }
 
-export async function createPlayer(
-  name: string,
-  skinModel: string
-): Promise<Player> {
+export async function createPlayer(name: string, skinModel: string): Promise<Player> {
   return request("/api/players", {
     method: "POST",
     body: JSON.stringify({ name, skin_model: skinModel }),
@@ -76,10 +73,7 @@ export async function deletePlayer(id: string): Promise<void> {
   await request(`/api/players/${id}`, { method: "DELETE" });
 }
 
-export async function updateSkinModel(
-  id: string,
-  model: string
-): Promise<void> {
+export async function updateSkinModel(id: string, model: string): Promise<void> {
   await request(`/api/players/${id}/skin-model`, {
     method: "PUT",
     body: JSON.stringify({ model }),
@@ -90,7 +84,7 @@ export async function uploadTexture(
   playerId: string,
   type: "skin" | "cape",
   file: File,
-  model?: string
+  model?: string,
 ): Promise<void> {
   const form = new FormData();
   form.append("file", file);
@@ -103,10 +97,7 @@ export async function uploadTexture(
   });
 }
 
-export async function deleteTexture(
-  playerId: string,
-  type: "skin" | "cape"
-): Promise<void> {
+export async function deleteTexture(playerId: string, type: "skin" | "cape"): Promise<void> {
   await request(`/service/api/user/profile/${playerId}/${type}`, {
     method: "DELETE",
   });
