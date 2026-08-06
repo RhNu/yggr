@@ -26,7 +26,7 @@ anyhow = "1"
 rand = "0.8"
 rand_core = "0.6"
 time = { version = "0.3", features = ["formatting", "parsing", "macros"] }
-tracing = "0.1"
+tracing = { version = "0.1", features = ["attributes"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 hex = "0.4"
 mime = "0.3"

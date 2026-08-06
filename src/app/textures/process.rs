@@ -8,6 +8,7 @@
 use anyhow::{Context, Result};
 use png::{BitDepth, ColorType, Decoder, Encoder};
 use std::io::Cursor;
+use tracing::instrument;
 
 use crate::core::db::TextureKind;
 
@@ -15,6 +16,7 @@ use crate::core::db::TextureKind;
 const MAX_TEXTURE_SIZE: u32 = 1024;
 
 /// 校验并清洗 PNG:检查尺寸合法性、重编码去除无关数据,返回干净的 RGBA8 PNG
+#[instrument(skip(data), fields(kind = ?kind), level = "debug")]
 pub fn sanitize_png(data: &[u8], kind: TextureKind) -> Result<Vec<u8>> {
     // 先仅读取头部获取尺寸,未解码像素数据前不分配大块内存
     let decoder = Decoder::new(Cursor::new(data));
@@ -101,6 +103,7 @@ fn validate_dimensions(w: u32, h: u32, kind: TextureKind) -> Result<()> {
 }
 
 /// 将 22x17 倍数披风补足到 64x32 倍数(带透明像素)
+#[instrument(skip(data), level = "debug")]
 pub fn pad_cape(data: &[u8]) -> Result<Vec<u8>> {
     let decoder = Decoder::new(Cursor::new(data));
     let mut reader = decoder

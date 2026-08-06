@@ -8,7 +8,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 use tracing_subscriber::EnvFilter;
 
 use yggr::api::build_app;
@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("yggr=info,tower_http=info")),
+                .unwrap_or_else(|_| EnvFilter::new("yggr=info,tower_http=debug")),
         )
         .init();
 
@@ -53,6 +53,7 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| PathBuf::from("config"));
     let config_path = config_dir.join("config.toml");
     let mut config = if Path::new(&config_path).exists() {
+        debug!("loading config from {}", config_path.display());
         Config::load(&config_path)?
     } else {
         warn!(
@@ -66,6 +67,7 @@ async fn main() -> Result<()> {
 
     // 数据库
     let db_path = config.data.dir.join("yggr.db");
+    debug!("initializing database at {}", db_path.display());
     let pool: SqlitePool = db::init_db(&db_path).await?;
 
     // RSA 密钥(自动生成)
@@ -79,7 +81,11 @@ async fn main() -> Result<()> {
 
     // 内置默认皮肤(导入到材质存储)
     let default_skins = DefaultSkins::init(&store)?;
-    info!("default skins ready");
+    debug!(
+        "default skins: classic={}, slim={}",
+        default_skins.classic_hash(),
+        default_skins.slim_hash()
+    );
 
     // 用户初始化
     user::apply_users(&config, &pool).await?;

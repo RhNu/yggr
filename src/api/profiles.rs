@@ -17,23 +17,28 @@ use crate::core::db::{
 };
 use crate::core::error::{ApiError, ApiResult};
 use crate::core::types::{JsonResponse, ProfileResponse};
+use tracing::{debug, info, instrument, warn};
 
 /// 单次批量查询的最大角色数(防 CC 攻击)
 const MAX_PROFILES_PER_REQUEST: usize = 100;
 
 fn db_err(e: anyhow::Error) -> ApiError {
+    tracing::error!(error = %e, "database error in profiles");
     ApiError::internal(e.to_string())
 }
 
 fn sqlx_err(e: sqlx::Error) -> ApiError {
+    tracing::error!(error = %e, "sqlx error in profiles");
     ApiError::internal(e.to_string())
 }
 
 fn internal(e: anyhow::Error) -> ApiError {
+    tracing::error!(error = %e, "internal error in profiles");
     ApiError::internal(e.to_string())
 }
 
 /// POST /service/api/profiles/minecraft
+#[instrument(skip_all, fields(count = names.len()), level = "debug")]
 pub async fn batch_profiles(
     State(state): State<AppState>,
     Json(names): Json<Vec<String>>,
@@ -42,6 +47,11 @@ pub async fn batch_profiles(
         return Ok(JsonResponse(Vec::new()));
     }
     if names.len() > MAX_PROFILES_PER_REQUEST {
+        warn!(
+            count = names.len(),
+            max = MAX_PROFILES_PER_REQUEST,
+            "too many profiles requested"
+        );
         return Err(ApiError::bad_request(format!(
             "Too many profiles requested (max {})",
             MAX_PROFILES_PER_REQUEST
@@ -50,6 +60,7 @@ pub async fn batch_profiles(
     let players = get_players_by_names(&state.pool, &names)
         .await
         .map_err(db_err)?;
+    debug!(returned = players.len(), "batch profiles lookup");
     Ok(JsonResponse(
         players.iter().map(ProfileResponse::basic).collect(),
     ))
@@ -70,6 +81,7 @@ pub async fn require_bearer(
 }
 
 /// PUT /service/api/user/profile/{uuid}/skin
+#[instrument(skip_all, level = "debug")]
 pub async fn upload_skin(
     state: State<AppState>,
     headers: HeaderMap,
@@ -80,6 +92,7 @@ pub async fn upload_skin(
 }
 
 /// PUT /service/api/user/profile/{uuid}/cape
+#[instrument(skip_all, level = "debug")]
 pub async fn upload_cape(
     state: State<AppState>,
     headers: HeaderMap,
@@ -90,6 +103,7 @@ pub async fn upload_cape(
 }
 
 /// PUT /service/api/user/profile/{uuid}/{textureType}
+#[instrument(skip_all, fields(uuid = %uuid, kind = ?kind), level = "debug")]
 async fn upload_texture(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -102,9 +116,12 @@ async fn upload_texture(
     let player = get_player_by_id(&state.pool, &uuid)
         .await
         .map_err(db_err)?
-        .ok_or_else(|| ApiError::not_found("Unknown profile"))?;
-    // 角色必须属于令牌用户
+        .ok_or_else(|| {
+            warn!(uuid = %uuid, "upload: player not found");
+            ApiError::not_found("Unknown profile")
+        })?;
     if player.user_id != tok.user_id {
+        warn!(uuid = %uuid, "upload: player not owned by token user");
         return Err(ApiError::not_found("Unknown profile"));
     }
 
@@ -184,10 +201,12 @@ async fn upload_texture(
     update_player_texture(&state.pool, &player.id, kind, Some(&hash))
         .await
         .map_err(db_err)?;
+    info!(uuid = %uuid, kind = ?kind, hash = %hash, "texture uploaded");
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// DELETE /service/api/user/profile/{uuid}/skin
+#[instrument(skip_all, level = "debug")]
 pub async fn delete_skin(
     state: State<AppState>,
     headers: HeaderMap,
@@ -197,6 +216,7 @@ pub async fn delete_skin(
 }
 
 /// DELETE /service/api/user/profile/{uuid}/cape
+#[instrument(skip_all, level = "debug")]
 pub async fn delete_cape(
     state: State<AppState>,
     headers: HeaderMap,
@@ -206,6 +226,7 @@ pub async fn delete_cape(
 }
 
 /// DELETE /service/api/user/profile/{uuid}/{textureType}
+#[instrument(skip_all, fields(uuid = %uuid, kind = ?kind), level = "debug")]
 async fn delete_texture(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -217,17 +238,23 @@ async fn delete_texture(
     let player = get_player_by_id(&state.pool, &uuid)
         .await
         .map_err(db_err)?
-        .ok_or_else(|| ApiError::not_found("Unknown profile"))?;
+        .ok_or_else(|| {
+            warn!(uuid = %uuid, "delete texture: player not found");
+            ApiError::not_found("Unknown profile")
+        })?;
     if player.user_id != tok.user_id {
+        warn!(uuid = %uuid, "delete texture: player not owned by token user");
         return Err(ApiError::not_found("Unknown profile"));
     }
     update_player_texture(&state.pool, &player.id, kind, None)
         .await
         .map_err(db_err)?;
+    info!(uuid = %uuid, kind = ?kind, "texture deleted");
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// GET /service/textures/{hash} - 材质文件服务
+#[instrument(skip_all, fields(hash = %hash), level = "debug")]
 pub async fn texture_file(
     State(state): State<AppState>,
     Path(hash): Path<String>,
@@ -243,6 +270,7 @@ pub async fn texture_file(
 }
 
 /// GET /service/textures/default/{model} - 默认皮肤文件服务(classic|slim)
+#[instrument(skip_all, fields(model = %model), level = "debug")]
 pub async fn default_skin(
     State(state): State<AppState>,
     Path(model): Path<String>,
@@ -262,11 +290,13 @@ pub async fn default_skin(
 }
 
 /// GET /service/skins/MinecraftSkins/{username} - 旧式皮肤 API(legacy_skin_api=true 时由服务端处理)
+#[instrument(skip_all, fields(username = %username), level = "debug")]
 pub async fn legacy_skin(
     State(state): State<AppState>,
     Path(username): Path<String>,
 ) -> ApiResult<impl IntoResponse> {
     if !state.config.features.legacy_skin_api {
+        debug!("legacy skin api disabled");
         return Ok(StatusCode::NOT_FOUND.into_response());
     }
     let player = get_player_by_id(&state.pool, &username)

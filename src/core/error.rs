@@ -5,6 +5,7 @@
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use tracing::{error, warn};
 
 #[derive(Debug, Clone)]
 pub struct ApiError {
@@ -92,6 +93,21 @@ impl IntoResponse for ApiError {
             "errorMessage": self.error_message,
             "cause": self.cause,
         });
+        if self.status.is_server_error() {
+            error!(
+                status = %self.status,
+                error = %self.error,
+                message = %self.error_message,
+                "server error response"
+            );
+        } else if self.status.is_client_error() {
+            warn!(
+                status = %self.status,
+                error = %self.error,
+                message = %self.error_message,
+                "client error response"
+            );
+        }
         (
             self.status,
             [(

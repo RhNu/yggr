@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
+use tracing::instrument;
 
 use crate::core::crypto::sha256_hex;
 use crate::core::db::TextureKind;
@@ -23,6 +24,7 @@ impl TextureStore {
     }
 
     /// 保存材质数据,返回 SHA-256 hash;已存在则直接返回 hash
+    #[instrument(skip(self, data), fields(hash), level = "trace")]
     pub fn save(&self, data: &[u8]) -> Result<String> {
         let hash = sha256_hex(data);
         let path = self.dir.join(format!("{}.png", hash));
@@ -30,10 +32,12 @@ impl TextureStore {
             std::fs::write(&path, data)
                 .with_context(|| format!("failed to write texture: {}", path.display()))?;
         }
+        tracing::Span::current().record("hash", &hash);
         Ok(hash)
     }
 
     /// 读取材质数据
+    #[instrument(skip(self), fields(hash = %hash), level = "trace")]
     pub fn load(&self, hash: &str) -> Result<Option<Vec<u8>>> {
         let path = self.dir.join(format!("{}.png", hash));
         if !path.exists() {

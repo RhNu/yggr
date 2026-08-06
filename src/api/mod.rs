@@ -17,6 +17,7 @@ use axum::http::{Response, header};
 use axum::middleware;
 use axum::routing::{get, post, put};
 use tower_http::services::ServeDir;
+use tower_http::trace::TraceLayer;
 
 use crate::app::state::AppState;
 
@@ -131,5 +132,5 @@ pub fn build_app(state: AppState) -> Router {
         router = router.fallback_service(ServeDir::new(dir));
     }
 
-    router
+    router.layer(TraceLayer::new_for_http())
 }

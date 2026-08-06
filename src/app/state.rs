@@ -8,6 +8,7 @@ use time::OffsetDateTime;
 
 use crate::app::textures::{DefaultSkins, TextureStore};
 use crate::core::config::Config;
+use tracing::{debug, warn};
 
 /// hasJoined 会话记录(join 后短暂有效)
 #[derive(Debug, Clone)]
@@ -42,7 +43,6 @@ impl RateLimiter {
         }
         let now = OffsetDateTime::now_utc().unix_timestamp();
         let mut map = self.inner.lock().unwrap();
-        // 清理过期条目,防止无限增长
         if map.len() > 10_000 {
             map.retain(|_, (window, _)| *window > now - self.window_secs * 2);
         }
@@ -51,6 +51,7 @@ impl RateLimiter {
             *entry = (now, 0);
         }
         if entry.1 >= self.limit {
+            warn!(key = key, limit = self.limit, "rate limit exceeded");
             return false;
         }
         entry.1 += 1;
@@ -78,6 +79,15 @@ impl AppState {
     pub fn cleanup_sessions(&self) {
         let now = OffsetDateTime::now_utc().unix_timestamp() * 1000;
         let mut map = self.sessions.lock().unwrap();
+        let before = map.len();
         map.retain(|_, record| record.expires_at > now);
+        let after = map.len();
+        if before != after {
+            debug!(
+                removed = before - after,
+                remaining = after,
+                "cleaned up expired join sessions"
+            );
+        }
     }
 }

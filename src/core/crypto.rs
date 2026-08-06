@@ -18,6 +18,7 @@ use sha1::Sha1;
 use sha2::{Digest, Sha256};
 use std::path::Path;
 use time::OffsetDateTime;
+use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
 /// 生成 RSA-4096 私钥(同时返回公钥);规范推荐长度,仅影响新生成的主签名密钥
@@ -34,8 +35,10 @@ pub fn generate_keypair_with_size(bits: usize) -> Result<(RsaPrivateKey, RsaPubl
 }
 
 /// 加载或生成 RSA 私钥;不存在时生成并写入 PKCS#8 PEM 文件
+#[instrument(skip(path), fields(path = %path.display()), level = "debug")]
 pub fn load_or_generate_key(path: &Path) -> Result<(RsaPrivateKey, RsaPublicKey)> {
     if path.exists() {
+        debug!("loading existing signing key");
         let pem = std::fs::read_to_string(path)
             .with_context(|| format!("failed to read key file: {}", path.display()))?;
         let private = RsaPrivateKey::from_pkcs8_pem(&pem)
@@ -43,6 +46,7 @@ pub fn load_or_generate_key(path: &Path) -> Result<(RsaPrivateKey, RsaPublicKey)
         let public = RsaPublicKey::from(&private);
         Ok((private, public))
     } else {
+        info!("generating new RSA-4096 signing key");
         let (private, public) = generate_keypair()?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)

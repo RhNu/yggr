@@ -17,8 +17,10 @@ use crate::core::db::{
 };
 use crate::core::error::{ApiError, ApiResult};
 use crate::core::types::JsonResponse;
+use tracing::{debug, info, instrument, warn};
 
 fn db_err(e: anyhow::Error) -> ApiError {
+    tracing::error!(error = %e, "database error in manage");
     ApiError::internal(e.to_string())
 }
 
@@ -59,6 +61,7 @@ impl From<Player> for PlayerDto {
 }
 
 /// GET /api/me - 当前用户信息 + 角色列表
+#[instrument(skip_all, level = "debug")]
 pub async fn me(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -91,6 +94,7 @@ fn default_model() -> String {
 }
 
 /// POST /api/players - 创建角色
+#[instrument(skip_all, fields(name = %req.name), level = "debug")]
 pub async fn create_player_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -108,6 +112,7 @@ pub async fn create_player_handler(
         .await
         .map_err(db_err)?;
     if count >= state.config.auth.max_players_per_user as i64 {
+        warn!(user_id = %tok.user_id, max = state.config.auth.max_players_per_user, "max players reached");
         return Err(ApiError::bad_request(format!(
             "Maximum {} players reached",
             state.config.auth.max_players_per_user
@@ -120,6 +125,7 @@ pub async fn create_player_handler(
         .map_err(db_err)?
         .is_some()
     {
+        warn!(name = %name, "player name already exists");
         return Err(ApiError::bad_request("Player name already exists"));
     }
 
@@ -139,6 +145,8 @@ pub async fn create_player_handler(
     .await
     .map_err(db_err)?;
 
+    info!(player_id = %player_id, name = %name, user_id = %tok.user_id, "player created");
+
     let player = get_player_by_id(&state.pool, &player_id)
         .await
         .map_err(db_err)?
@@ -147,6 +155,7 @@ pub async fn create_player_handler(
 }
 
 /// DELETE /api/players/{id} - 删除角色
+#[instrument(skip_all, fields(id = %id), level = "debug")]
 pub async fn delete_player_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -156,11 +165,16 @@ pub async fn delete_player_handler(
     let player = get_player_by_id(&state.pool, &id)
         .await
         .map_err(db_err)?
-        .ok_or_else(|| ApiError::not_found("Player not found"))?;
+        .ok_or_else(|| {
+            debug!(id = %id, "delete player: not found");
+            ApiError::not_found("Player not found")
+        })?;
     if player.user_id != tok.user_id {
+        warn!(id = %id, "delete player: not owned by token user");
         return Err(ApiError::not_found("Player not found"));
     }
     delete_player(&state.pool, &id).await.map_err(db_err)?;
+    info!(id = %id, "player deleted");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -171,6 +185,7 @@ pub struct UpdateSkinModelRequest {
 }
 
 /// PUT /api/players/{id}/skin-model - 切换皮肤模型
+#[instrument(skip_all, fields(id = %id, model = %req.model), level = "debug")]
 pub async fn update_skin_model_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -181,16 +196,22 @@ pub async fn update_skin_model_handler(
     let player = get_player_by_id(&state.pool, &id)
         .await
         .map_err(db_err)?
-        .ok_or_else(|| ApiError::not_found("Player not found"))?;
+        .ok_or_else(|| {
+            debug!(id = %id, "update skin model: player not found");
+            ApiError::not_found("Player not found")
+        })?;
     if player.user_id != tok.user_id {
+        warn!(id = %id, "update skin model: not owned by token user");
         return Err(ApiError::not_found("Player not found"));
     }
     if req.model != "classic" && req.model != "slim" {
+        warn!(id = %id, model = %req.model, "invalid skin model");
         return Err(ApiError::bad_request("Invalid skin model"));
     }
     update_skin_model(&state.pool, &id, &req.model)
         .await
         .map_err(db_err)?;
+    info!(id = %id, model = %req.model, "skin model updated");
     Ok(StatusCode::NO_CONTENT)
 }
 

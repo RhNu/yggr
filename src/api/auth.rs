@@ -19,11 +19,13 @@ use crate::core::db::{
 };
 use crate::core::error::{ApiError, ApiResult};
 use crate::core::types::{JsonResponse, ProfileResponse, UserResponse};
+use tracing::{debug, error, info, instrument, warn};
 
 /// 每个用户同时有效的令牌数上限(规范建议,如 10);超限吊销最旧的
 const MAX_TOKENS_PER_USER: usize = 10;
 
 fn db_err(e: anyhow::Error) -> ApiError {
+    error!(error = %e, "database error in auth");
     ApiError::internal(e.to_string())
 }
 
@@ -155,18 +157,19 @@ pub struct SignoutRequest {
 // ---- Handlers ----
 
 /// POST /service/authserver/authenticate
+#[instrument(skip_all, level = "debug")]
 pub async fn authenticate(
     State(state): State<AppState>,
     headers: HeaderMap,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(req): Json<AuthenticateRequest>,
 ) -> ApiResult<JsonResponse<AuthenticateResponse>> {
-    // 限流:按客户端 IP(防全网爆破)+ 按用户名(规范建议针对用户,防单人爆破)
     let ip = client_ip(&headers, addr);
     if !state.limiter.check(&ip.to_string()) || !state.limiter.check(&req.username) {
-        // 规范:短时间内多次登录失败按密码错误处理
+        warn!(ip = %ip, username = %req.username, "rate limited");
         return Err(ApiError::invalid_credentials());
     }
+    debug!(ip = %ip, username = %req.username, "authentication attempt");
 
     let pool: &SqlitePool = &state.pool;
 
@@ -196,8 +199,10 @@ pub async fn authenticate(
     };
 
     if !verify_password(&req.password, &user.password_hash) {
+        warn!(username = %req.username, "authentication failed: invalid password");
         return Err(ApiError::invalid_credentials());
     }
+    info!(username = %user.username, user_id = %user.id, "authentication successful");
 
     // 角色绑定规则:角色名登录绑定该角色;仅一个角色自动绑定;多角色由客户端选择
     let players = get_players_by_user(pool, &user.id).await.map_err(db_err)?;
@@ -247,6 +252,7 @@ pub async fn authenticate(
 }
 
 /// POST /service/authserver/refresh
+#[instrument(skip_all, level = "debug")]
 pub async fn refresh(
     State(state): State<AppState>,
     Json(req): Json<RefreshRequest>,
@@ -256,10 +262,13 @@ pub async fn refresh(
     let tok = get_token(pool, &req.access_token)
         .await
         .map_err(db_err)?
-        .ok_or_else(ApiError::invalid_token)?;
-    // refresh 接受有效与暂时失效的令牌
+        .ok_or_else(|| {
+            debug!("refresh: token not found");
+            ApiError::invalid_token()
+        })?;
     let status = token_status(&tok, &state.config);
     if status == TokenStatus::Invalid {
+        warn!(user_id = %tok.user_id, "refresh: token expired");
         return Err(ApiError::invalid_token());
     }
     if let Some(ct) = &req.client_token
@@ -298,10 +307,10 @@ pub async fn refresh(
     )
     .await
     .map_err(db_err)?;
-    // 新令牌已成功创建,现在吊销原令牌
     delete_token(pool, &tok.access_token)
         .await
         .map_err(db_err)?;
+    info!(user_id = %tok.user_id, "token refreshed");
     // 令牌数量上限兜底(数量不变,防御性调用)
     enforce_token_limit(pool, &tok.user_id, MAX_TOKENS_PER_USER)
         .await
@@ -333,6 +342,7 @@ pub async fn refresh(
 }
 
 /// POST /service/authserver/validate;有效返回 204
+#[instrument(skip_all, level = "debug")]
 pub async fn validate(
     State(state): State<AppState>,
     Json(req): Json<ValidateRequest>,
@@ -340,8 +350,12 @@ pub async fn validate(
     let tok = get_token(&state.pool, &req.access_token)
         .await
         .map_err(db_err)?
-        .ok_or_else(ApiError::invalid_token)?;
+        .ok_or_else(|| {
+            debug!("validate: token not found");
+            ApiError::invalid_token()
+        })?;
     if !token_valid(&tok, &state.config) {
+        warn!(user_id = %tok.user_id, "validate: token invalid or expired");
         return Err(ApiError::invalid_token());
     }
     if let Some(ct) = &req.client_token
@@ -353,6 +367,7 @@ pub async fn validate(
 }
 
 /// POST /service/authserver/invalidate;无论结果如何返回 204
+#[instrument(skip_all, level = "debug")]
 pub async fn invalidate(
     State(state): State<AppState>,
     Json(req): Json<InvalidateRequest>,
@@ -364,51 +379,69 @@ pub async fn invalidate(
         delete_token(&state.pool, &tok.access_token)
             .await
             .map_err(db_err)?;
+        info!(user_id = %tok.user_id, "token invalidated");
+    } else {
+        debug!("invalidate: token not found (returning 204)");
     }
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// POST /service/authserver/signout;吊销用户所有令牌
+#[instrument(skip_all, level = "debug")]
 pub async fn signout(
     State(state): State<AppState>,
     headers: HeaderMap,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(req): Json<SignoutRequest>,
 ) -> ApiResult<StatusCode> {
-    // 限流:IP + 用户名双维度(与 authenticate 同等强度)
     let ip = client_ip(&headers, addr);
     if !state.limiter.check(&ip.to_string()) || !state.limiter.check(&req.username) {
+        warn!(ip = %ip, username = %req.username, "signout rate limited");
         return Err(ApiError::invalid_credentials());
     }
     let user = get_user_by_username(&state.pool, &req.username)
         .await
         .map_err(db_err)?
-        .ok_or_else(ApiError::invalid_credentials)?;
+        .ok_or_else(|| {
+            debug!("signout: user not found: {}", req.username);
+            ApiError::invalid_credentials()
+        })?;
     if !verify_password(&req.password, &user.password_hash) {
+        warn!(username = %req.username, "signout: invalid password");
         return Err(ApiError::invalid_credentials());
     }
     delete_tokens_by_user(&state.pool, &user.id)
         .await
         .map_err(db_err)?;
+    info!(user_id = %user.id, "user signed out, all tokens revoked");
     Ok(StatusCode::NO_CONTENT)
 }
 
 // ---- 辅助:Bearer 认证(材质上传、certificates) ----
 
 /// 从 Authorization: Bearer 头解析并校验令牌;无效返回 401
+#[instrument(skip_all, level = "debug")]
 pub async fn bearer_token(state: &AppState, headers: &HeaderMap) -> Result<Token, ApiError> {
     let auth = headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(ApiError::unauthorized)?;
-    let token = auth
-        .strip_prefix("Bearer ")
-        .ok_or_else(ApiError::unauthorized)?;
+        .ok_or_else(|| {
+            debug!("bearer: no authorization header");
+            ApiError::unauthorized()
+        })?;
+    let token = auth.strip_prefix("Bearer ").ok_or_else(|| {
+        debug!("bearer: invalid scheme");
+        ApiError::unauthorized()
+    })?;
     let tok = get_token(&state.pool, token)
         .await
         .map_err(db_err)?
-        .ok_or_else(ApiError::unauthorized)?;
+        .ok_or_else(|| {
+            debug!("bearer: token not found");
+            ApiError::unauthorized()
+        })?;
     if !token_valid(&tok, &state.config) {
+        warn!(user_id = %tok.user_id, "bearer: token invalid or expired");
         return Err(ApiError::unauthorized());
     }
     Ok(tok)

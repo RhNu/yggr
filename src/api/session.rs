@@ -17,11 +17,13 @@ use crate::core::crypto::{now_millis, sign_sha1};
 use crate::core::db::{Player, get_player_by_id, get_token};
 use crate::core::error::{ApiError, ApiResult};
 use crate::core::types::{JsonResponse, ProfileResponse, Property};
+use tracing::{debug, info, instrument, warn};
 
 /// join 会话有效期(毫秒)
 const JOIN_TTL_MS: i64 = 30_000;
 
 fn db_err(e: anyhow::Error) -> ApiError {
+    tracing::error!(error = %e, "database error in session");
     ApiError::internal(e.to_string())
 }
 
@@ -63,6 +65,7 @@ pub struct JoinRequest {
 }
 
 /// POST /service/sessionserver/session/minecraft/join
+#[instrument(skip_all, level = "debug")]
 pub async fn join(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -72,18 +75,25 @@ pub async fn join(
     let tok = get_token(&state.pool, &req.access_token)
         .await
         .map_err(db_err)?
-        .ok_or_else(ApiError::invalid_token)?;
+        .ok_or_else(|| {
+            debug!("join: token not found");
+            ApiError::invalid_token()
+        })?;
     if crate::api::auth::token_status(&tok, &state.config) != crate::api::auth::TokenStatus::Valid {
+        warn!(user_id = %tok.user_id, "join: token invalid");
         return Err(ApiError::invalid_token());
     }
-    // selectedProfile 必须与令牌绑定的角色一致
     if tok.player_id.as_deref() != Some(req.selected_profile.as_str()) {
+        warn!(user_id = %tok.user_id, "join: profile mismatch");
         return Err(ApiError::invalid_token());
     }
     let player = get_player_by_id(&state.pool, &req.selected_profile)
         .await
         .map_err(db_err)?
-        .ok_or_else(ApiError::invalid_token)?;
+        .ok_or_else(|| {
+            debug!("join: player not found: {}", req.selected_profile);
+            ApiError::invalid_token()
+        })?;
 
     let ip = client_ip(&headers, addr).to_string();
     let expires_at = now_millis() + JOIN_TTL_MS;
@@ -96,6 +106,7 @@ pub async fn join(
             expires_at,
         },
     );
+    info!(player = %player.name, player_id = %player.id, "session joined");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -110,6 +121,7 @@ pub struct HasJoinedQuery {
 }
 
 /// GET /service/sessionserver/session/minecraft/hasJoined
+#[instrument(skip_all, level = "debug")]
 pub async fn has_joined(
     State(state): State<AppState>,
     Query(query): Query<HasJoinedQuery>,
@@ -118,18 +130,19 @@ pub async fn has_joined(
     let record: Option<JoinRecord> = {
         let mut map = state.sessions.lock().unwrap();
         let rec = map.get(&query.server_id).cloned();
-        // 一次性使用:无论成功失败都移除,防止重放
         map.remove(&query.server_id);
         rec
     };
     let Some(record) = record else {
+        debug!(server_id = %query.server_id, "hasJoined: no session");
         return Ok(Err(StatusCode::NO_CONTENT));
     };
     if record.expires_at <= now {
+        debug!(player = %record.player_name, "hasJoined: session expired");
         return Ok(Err(StatusCode::NO_CONTENT));
     }
-    // username 必须与记录角色名一致
     if record.player_name != query.username {
+        debug!(expected = %record.player_name, actual = %query.username, "hasJoined: name mismatch");
         return Ok(Err(StatusCode::NO_CONTENT));
     }
     // IP 校验(可选)
@@ -144,8 +157,12 @@ pub async fn has_joined(
     let player = get_player_by_id(&state.pool, &record.player_id)
         .await
         .map_err(db_err)?
-        .ok_or_else(ApiError::invalid_token)?;
+        .ok_or_else(|| {
+            debug!(player_id = %record.player_id, "hasJoined: player not found");
+            ApiError::invalid_token()
+        })?;
     let profile = build_profile_response(&state, &player, true)?;
+    info!(player = %record.player_name, "hasJoined: verified");
     Ok(Ok(JsonResponse(profile)))
 }
 
@@ -157,12 +174,14 @@ pub struct ProfileQuery {
 }
 
 /// GET /service/sessionserver/session/minecraft/profile/{uuid}
+#[instrument(skip_all, level = "debug")]
 pub async fn profile(
     State(state): State<AppState>,
     Path(uuid): Path<String>,
     Query(query): Query<ProfileQuery>,
 ) -> ApiResult<Result<JsonResponse<ProfileResponse>, StatusCode>> {
     let Some(player) = get_player_by_id(&state.pool, &uuid).await.map_err(db_err)? else {
+        debug!(uuid = %uuid, "profile: player not found");
         return Ok(Err(StatusCode::NO_CONTENT));
     };
     // unsigned=false 时包含签名;默认 true(不含签名)

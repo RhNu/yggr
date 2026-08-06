@@ -5,6 +5,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use rsa::RsaPrivateKey;
 use serde::Serialize;
+use tracing::instrument;
 
 use crate::core::config::Config;
 use crate::core::crypto::{now_millis, sign_sha1};
@@ -23,6 +24,7 @@ struct TexturesPayload<'a> {
 }
 
 /// 生成 Base64 编码的 textures 属性值(含 timestamp/profileId/profileName)
+#[instrument(skip(config, default_skins), fields(player = %player.name), level = "trace")]
 pub fn build_textures_value(
     config: &Config,
     default_skins: &DefaultSkins,

@@ -22,6 +22,7 @@ use crate::app::state::AppState;
 use crate::core::crypto::{millis_to_rfc3339, now_millis};
 use crate::core::error::{ApiError, ApiResult};
 use crate::core::types::JsonResponse;
+use tracing::{info, instrument, warn};
 
 /// 密钥对有效期(天)
 const KEY_VALIDITY_DAYS: i64 = 7;
@@ -46,17 +47,19 @@ pub struct CertificatesResponse {
 }
 
 fn internal(e: impl std::fmt::Display) -> ApiError {
+    tracing::error!(error = %e, "internal error in certificates");
     ApiError::internal(e.to_string())
 }
 
 /// POST /service/minecraftservices/player/certificates
+#[instrument(skip_all, level = "debug")]
 pub async fn certificates(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> ApiResult<JsonResponse<CertificatesResponse>> {
     let tok = bearer_token(&state, &headers).await?;
-    // 要求令牌已绑定角色(客户端在进服前获取证书)
     if tok.player_id.is_none() {
+        warn!(user_id = %tok.user_id, "certificates: no profile assigned");
         return Err(ApiError::bad_request(
             "Access token has no profile assigned.",
         ));
@@ -89,6 +92,7 @@ pub async fn certificates(
     );
     let sig_v2 = sign_sha256(&state.private_key, v2_payload.as_bytes())?;
 
+    info!(user_id = %tok.user_id, "certificates issued");
     Ok(JsonResponse(CertificatesResponse {
         key_pair: KeyPairResponse {
             private_key: private_b64,

@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::path::Path;
+use tracing::{debug, info, instrument};
 
 mod models;
 pub use models::{Player, TextureKind, Token, User};
@@ -41,6 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_tokens_player ON tokens(player_id);
 "#;
 
 /// 打开(必要时创建)SQLite 数据库并初始化表结构
+#[instrument(skip(path), fields(path = %path.display()), level = "debug")]
 pub async fn init_db(path: &Path) -> Result<SqlitePool> {
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
@@ -61,11 +63,13 @@ pub async fn init_db(path: &Path) -> Result<SqlitePool> {
         .execute(&pool)
         .await
         .context("failed to init schema")?;
+    info!("database initialized: {}", path.display());
     Ok(pool)
 }
 
 // ---- 用户 ----
 
+#[instrument(skip(pool), level = "trace")]
 pub async fn get_user_by_username(pool: &SqlitePool, username: &str) -> Result<Option<User>> {
     Ok(
         sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = ?")
@@ -75,6 +79,7 @@ pub async fn get_user_by_username(pool: &SqlitePool, username: &str) -> Result<O
     )
 }
 
+#[instrument(skip(pool), level = "trace")]
 pub async fn get_user_by_id(pool: &SqlitePool, id: &str) -> Result<Option<User>> {
     Ok(
         sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = ?")
@@ -84,6 +89,7 @@ pub async fn get_user_by_id(pool: &SqlitePool, id: &str) -> Result<Option<User>>
     )
 }
 
+#[instrument(skip(pool), level = "trace")]
 pub async fn create_user(
     pool: &SqlitePool,
     id: &str,
@@ -105,6 +111,7 @@ pub async fn create_user(
 
 // ---- 角色 ----
 
+#[instrument(skip(pool), level = "trace")]
 pub async fn get_player_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Player>> {
     Ok(
         sqlx::query_as::<_, Player>("SELECT * FROM players WHERE id = ?")
@@ -114,6 +121,7 @@ pub async fn get_player_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Play
     )
 }
 
+#[instrument(skip(pool), level = "trace")]
 pub async fn get_player_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Player>> {
     Ok(
         sqlx::query_as::<_, Player>("SELECT * FROM players WHERE name = ?")
@@ -123,6 +131,7 @@ pub async fn get_player_by_name(pool: &SqlitePool, name: &str) -> Result<Option<
     )
 }
 
+#[instrument(skip(pool), level = "trace")]
 pub async fn get_players_by_user(pool: &SqlitePool, user_id: &str) -> Result<Vec<Player>> {
     Ok(
         sqlx::query_as::<_, Player>("SELECT * FROM players WHERE user_id = ? ORDER BY name")
@@ -132,6 +141,7 @@ pub async fn get_players_by_user(pool: &SqlitePool, user_id: &str) -> Result<Vec
     )
 }
 
+#[instrument(skip(pool), level = "debug")]
 pub async fn create_player(
     pool: &SqlitePool,
     id: &str,
@@ -156,6 +166,7 @@ pub async fn create_player(
 }
 
 /// 更新角色的材质(hash 为 None 表示清除)
+#[instrument(skip(pool), level = "trace")]
 pub async fn update_player_texture(
     pool: &SqlitePool,
     player_id: &str,
@@ -182,6 +193,7 @@ pub async fn update_player_texture(
 }
 
 /// 删除角色(关联令牌由 ON DELETE CASCADE 自动清理)
+#[instrument(skip(pool), level = "debug")]
 pub async fn delete_player(pool: &SqlitePool, id: &str) -> Result<bool> {
     let result = sqlx::query("DELETE FROM players WHERE id = ?")
         .bind(id)
@@ -191,6 +203,7 @@ pub async fn delete_player(pool: &SqlitePool, id: &str) -> Result<bool> {
 }
 
 /// 更新角色皮肤模型(classic / slim)
+#[instrument(skip(pool), level = "trace")]
 pub async fn update_skin_model(pool: &SqlitePool, player_id: &str, model: &str) -> Result<()> {
     sqlx::query("UPDATE players SET skin_model = ? WHERE id = ?")
         .bind(model)
@@ -201,6 +214,7 @@ pub async fn update_skin_model(pool: &SqlitePool, player_id: &str, model: &str) 
 }
 
 /// 统计用户拥有的角色数量
+#[instrument(skip(pool), level = "trace")]
 pub async fn count_players_by_user(pool: &SqlitePool, user_id: &str) -> Result<i64> {
     Ok(
         sqlx::query_scalar("SELECT COUNT(*) FROM players WHERE user_id = ?")
@@ -211,6 +225,7 @@ pub async fn count_players_by_user(pool: &SqlitePool, user_id: &str) -> Result<i
 }
 
 /// 批量按名称查询角色(保持输入顺序,不存在的跳过)
+#[instrument(skip(pool), level = "trace")]
 pub async fn get_players_by_names(pool: &SqlitePool, names: &[String]) -> Result<Vec<Player>> {
     let mut players = Vec::new();
     for name in names {
@@ -223,6 +238,7 @@ pub async fn get_players_by_names(pool: &SqlitePool, names: &[String]) -> Result
 
 // ---- 令牌 ----
 
+#[instrument(skip(pool), level = "trace")]
 pub async fn get_token(pool: &SqlitePool, access_token: &str) -> Result<Option<Token>> {
     Ok(
         sqlx::query_as::<_, Token>("SELECT * FROM tokens WHERE access_token = ?")
@@ -232,6 +248,7 @@ pub async fn get_token(pool: &SqlitePool, access_token: &str) -> Result<Option<T
     )
 }
 
+#[instrument(skip(pool), level = "debug")]
 pub async fn create_token(
     pool: &SqlitePool,
     access_token: &str,
@@ -255,6 +272,7 @@ pub async fn create_token(
     Ok(())
 }
 
+#[instrument(skip(pool), level = "debug")]
 pub async fn delete_token(pool: &SqlitePool, access_token: &str) -> Result<()> {
     sqlx::query("DELETE FROM tokens WHERE access_token = ?")
         .bind(access_token)
@@ -264,6 +282,7 @@ pub async fn delete_token(pool: &SqlitePool, access_token: &str) -> Result<()> {
 }
 
 /// 吊销用户的所有令牌(signout)
+#[instrument(skip(pool), level = "debug")]
 pub async fn delete_tokens_by_user(pool: &SqlitePool, user_id: &str) -> Result<()> {
     sqlx::query("DELETE FROM tokens WHERE user_id = ?")
         .bind(user_id)
@@ -273,6 +292,7 @@ pub async fn delete_tokens_by_user(pool: &SqlitePool, user_id: &str) -> Result<(
 }
 
 /// 删除用户的指定角色令牌(角色删除时清理)
+#[instrument(skip(pool), level = "debug")]
 pub async fn delete_tokens_by_player(pool: &SqlitePool, player_id: &str) -> Result<()> {
     sqlx::query("DELETE FROM tokens WHERE player_id = ?")
         .bind(player_id)
@@ -282,6 +302,7 @@ pub async fn delete_tokens_by_player(pool: &SqlitePool, player_id: &str) -> Resu
 }
 
 /// 限制用户令牌数量:超限时按颁发时间吊销最旧的令牌(规范建议,如上限 10)
+#[instrument(skip(pool), level = "debug")]
 pub async fn enforce_token_limit(pool: &SqlitePool, user_id: &str, max: usize) -> Result<()> {
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tokens WHERE user_id = ?")
         .bind(user_id)
@@ -291,6 +312,7 @@ pub async fn enforce_token_limit(pool: &SqlitePool, user_id: &str, max: usize) -
     if excess <= 0 {
         return Ok(());
     }
+    debug!(user_id = user_id, excess = excess, "revoking excess tokens");
     sqlx::query(
         "DELETE FROM tokens WHERE access_token IN (
             SELECT access_token FROM tokens WHERE user_id = ?
@@ -306,10 +328,15 @@ pub async fn enforce_token_limit(pool: &SqlitePool, user_id: &str, max: usize) -
 }
 
 /// 删除所有过期令牌,返回删除行数(启动时 + 定期清理调用)
+#[instrument(skip(pool), level = "debug")]
 pub async fn delete_expired_tokens(pool: &SqlitePool, now: i64) -> Result<u64> {
-    Ok(sqlx::query("DELETE FROM tokens WHERE expires_at <= ?")
+    let result = sqlx::query("DELETE FROM tokens WHERE expires_at <= ?")
         .bind(now)
         .execute(pool)
-        .await?
-        .rows_affected())
+        .await?;
+    let deleted = result.rows_affected();
+    if deleted > 0 {
+        debug!(deleted = deleted, "expired tokens cleaned");
+    }
+    Ok(deleted)
 }

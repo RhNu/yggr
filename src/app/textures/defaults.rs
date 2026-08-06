@@ -1,6 +1,7 @@
 //! 内置默认皮肤:steve(classic)与 alex(slim),作为无皮肤时的回退
 
 use anyhow::Result;
+use tracing::instrument;
 
 use crate::core::db::TextureKind;
 
@@ -19,6 +20,7 @@ pub struct DefaultSkins {
 
 impl DefaultSkins {
     /// 将内置皮肤导入材质存储,返回哈希
+    #[instrument(skip_all, level = "debug")]
     pub fn init(store: &TextureStore) -> Result<Self> {
         let classic = sanitize_png(STEVE_PNG, TextureKind::Skin)?;
         let slim = sanitize_png(ALEX_PNG, TextureKind::Skin)?;

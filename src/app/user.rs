@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use sqlx::SqlitePool;
-use tracing::{info, warn};
+use tracing::{info, instrument, warn};
 
 use crate::core::config::Config;
 use crate::core::crypto::{hash_password, random_uuid};
@@ -28,6 +28,7 @@ fn default_language() -> String {
 }
 
 /// 应用用户配置:已存在的用户名跳过
+#[instrument(skip(config, pool), level = "debug")]
 pub async fn apply_users(config: &Config, pool: &SqlitePool) -> Result<()> {
     let Some(user_path) = &config.user.file else {
         return Ok(());
