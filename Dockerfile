@@ -31,8 +31,6 @@ WORKDIR /app
 
 COPY --from=rust-builder /app/target/release/yggr /app/yggr
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
-COPY config/config.example.toml /app/config/config.example.toml
-COPY config/user.example.toml /app/config/user.example.toml
 
 RUN mkdir -p /app/data
 
