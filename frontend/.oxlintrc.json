@@ -71,7 +71,8 @@
     "import/prefer-default-export": "off",
     "prefer-destructuring": "off",
     "oxc/no-map-spread": "off",
-    "jsx-a11y/no-autofocus": "off"
+    "jsx-a11y/no-autofocus": "off",
+    "no-console": "error"
   },
   "settings": {
     "react": {

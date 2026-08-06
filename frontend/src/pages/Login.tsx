@@ -3,7 +3,10 @@ import { useState } from "react";
 import { login } from "../api";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
+import { createLogger } from "../logger";
 import { useAuthStore } from "../store/authStore";
+
+const log = createLogger("Login");
 
 export default function Login() {
   const setAuth = useAuthStore((s) => s.setAuth);
@@ -19,7 +22,9 @@ export default function Login() {
     try {
       const { access_token, client_token } = await login(username, password);
       setAuth(access_token, client_token);
+      log.info("login successful", { username });
     } catch (err) {
+      log.warn("login failed", { username, error: err });
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
       setLoading(false);

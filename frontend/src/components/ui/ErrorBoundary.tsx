@@ -1,5 +1,9 @@
 import { Component, type ReactNode } from "react";
 
+import { createLogger } from "../../logger";
+
+const log = createLogger("ErrorBoundary");
+
 interface Props {
   children: ReactNode;
 }
@@ -14,6 +18,10 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: { componentStack: string }) {
+    log.error("render error", { error: error.message, componentStack: info.componentStack });
   }
 
   handleReload = () => {

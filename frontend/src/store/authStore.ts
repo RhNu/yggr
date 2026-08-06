@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
+import { createLogger } from "../logger";
+
+const log = createLogger("authStore");
+
 interface AuthState {
   token: string | null;
   clientToken: string | null;
@@ -15,8 +19,14 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       clientToken: null,
       authed: false,
-      setAuth: (token, clientToken) => set({ token, clientToken, authed: true }),
-      logout: () => set({ token: null, clientToken: null, authed: false }),
+      setAuth: (token, clientToken) => {
+        log.info("authenticated");
+        set({ token, clientToken, authed: true });
+      },
+      logout: () => {
+        log.info("logged out");
+        set({ token: null, clientToken: null, authed: false });
+      },
     }),
     {
       name: "yggr-auth",

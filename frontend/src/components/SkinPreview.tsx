@@ -1,6 +1,10 @@
 import { useEffect, useRef } from "react";
 import type { SkinViewer } from "skinview3d";
 
+import { createLogger } from "../logger";
+
+const log = createLogger("SkinPreview");
+
 interface Props {
   skinUrl: string | null;
   capeUrl?: string | null;
@@ -39,7 +43,9 @@ export default function SkinPreview({ skinUrl, capeUrl, skinModel }: Props) {
       });
 
       if (cape) {
-        viewer.loadCape(cape).catch(() => {});
+        viewer.loadCape(cape).catch((err) => {
+          log.warn("failed to load cape", { error: err });
+        });
       }
 
       containerRef.current.innerHTML = "";

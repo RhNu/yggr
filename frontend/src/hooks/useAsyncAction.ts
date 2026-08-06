@@ -1,5 +1,9 @@
 import { useCallback, useState } from "react";
 
+import { createLogger } from "../logger";
+
+const log = createLogger("useAsyncAction");
+
 export function useAsyncAction() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -10,6 +14,7 @@ export function useAsyncAction() {
     try {
       return await fn();
     } catch (err) {
+      log.warn("action failed", { error: err });
       setError(err instanceof Error ? err.message : "Operation failed");
       return null;
     } finally {

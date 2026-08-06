@@ -10,7 +10,10 @@ import {
   type MeResponse,
   type Player,
 } from "../api";
+import { createLogger } from "../logger";
 import { useAuthStore } from "./authStore";
+
+const log = createLogger("playerStore");
 
 interface PlayerState {
   me: MeResponse | null;
@@ -38,10 +41,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ me: data, loading: false });
     } catch (err) {
       if (err instanceof Error && err.message.includes("Unauthorized")) {
+        log.warn("session expired");
         useAuthStore.getState().logout();
         set({ me: null, loading: false });
         return;
       }
+      log.error("failed to load data", { error: err });
       set({
         error: err instanceof Error ? err.message : "Failed to load data",
         loading: false,
@@ -56,8 +61,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       if (me) {
         set({ me: { ...me, players: [...me.players, player] } });
       }
+      log.debug("player created", { name });
       return true;
-    } catch {
+    } catch (err) {
+      log.error("failed to create player", { name, error: err });
       return false;
     }
   },
@@ -71,8 +78,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           me: { ...me, players: me.players.filter((p) => p.id !== id) },
         });
       }
+      log.debug("player deleted", { id });
       return true;
-    } catch {
+    } catch (err) {
+      log.error("failed to delete player", { id, error: err });
       return false;
     }
   },
@@ -89,8 +98,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           },
         });
       }
+      log.debug("skin model updated", { id, model });
       return true;
-    } catch {
+    } catch (err) {
+      log.error("failed to update skin model", { id, error: err });
       return false;
     }
   },
@@ -99,8 +110,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     try {
       await apiUploadTexture(playerId, "skin", file, model);
       await get().refresh();
+      log.debug("skin uploaded", { playerId });
       return true;
-    } catch {
+    } catch (err) {
+      log.error("failed to upload skin", { playerId, error: err });
       return false;
     }
   },
@@ -109,8 +122,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     try {
       await apiUploadTexture(playerId, "cape", file);
       await get().refresh();
+      log.debug("cape uploaded", { playerId });
       return true;
-    } catch {
+    } catch (err) {
+      log.error("failed to upload cape", { playerId, error: err });
       return false;
     }
   },
@@ -134,8 +149,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           },
         });
       }
+      log.debug("texture removed", { playerId, type });
       return true;
-    } catch {
+    } catch (err) {
+      log.error("failed to remove texture", { playerId, type, error: err });
       return false;
     }
   },

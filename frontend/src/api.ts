@@ -1,5 +1,7 @@
+import { createLogger } from "./logger";
 import { getToken } from "./store/authStore";
 
+const log = createLogger("api");
 const API_BASE = "";
 
 async function request(path: string, options: RequestInit = {}) {
@@ -24,8 +26,14 @@ async function request(path: string, options: RequestInit = {}) {
     } catch {
       if (text) msg = text;
     }
+    if (resp.status >= 500) {
+      log.error("server error", { path, status: resp.status, message: msg });
+    } else {
+      log.warn("client error", { path, status: resp.status, message: msg });
+    }
     throw new Error(msg);
   }
+  log.debug("request completed", { path, status: resp.status });
   return text ? JSON.parse(text) : null;
 }
 
