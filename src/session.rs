@@ -1,0 +1,168 @@
+//! /sessionserver/* 会话 API:
+//! - POST /sessionserver/session/minecraft/join 客户端进入服务器
+//! - GET /sessionserver/session/minecraft/hasJoined 服务端验证客户端
+//! - GET /sessionserver/session/minecraft/profile/{uuid} 查询角色属性
+
+use axum::extract::{ConnectInfo, Path, Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::Json;
+use base64::Engine;
+use serde::Deserialize;
+use std::net::SocketAddr;
+
+use crate::auth::client_ip;
+use crate::crypto::{now_millis, sign_sha1};
+use crate::db::{get_player_by_id, get_token, Player};
+use crate::error::{ApiError, ApiResult};
+use crate::state::{AppState, JoinRecord};
+use crate::textures::build_textures_value;
+use crate::types::{ProfileResponse, Property};
+
+/// join 会话有效期(毫秒)
+const JOIN_TTL_MS: i64 = 30_000;
+
+fn db_err(e: anyhow::Error) -> ApiError {
+    ApiError::internal(e.to_string())
+}
+
+/// 构建角色完整响应(含签名 textures 属性)
+pub fn build_profile_response(state: &AppState, player: &Player, signed: bool) -> ApiResult<ProfileResponse> {
+    let mut properties = Vec::new();
+    if player.skin_hash.is_some() || player.cape_hash.is_some() {
+        let value = build_textures_value(&state.config, player)
+            .map_err(|e| ApiError::internal(e.to_string()))?;
+        if signed {
+            let sig = sign_sha1(&state.private_key, value.as_bytes())
+                .map_err(|e| ApiError::internal(e.to_string()))?;
+            properties.push(Property::signed(
+                "textures",
+                &value,
+                base64::engine::general_purpose::STANDARD.encode(sig),
+            ));
+        } else {
+            properties.push(Property::plain("textures", &value));
+        }
+    }
+    Ok(ProfileResponse::full(player, properties))
+}
+
+// ---- join ----
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JoinRequest {
+    pub access_token: String,
+    pub selected_profile: String,
+    pub server_id: String,
+}
+
+/// POST /sessionserver/session/minecraft/join
+pub async fn join(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(req): Json<JoinRequest>,
+) -> ApiResult<StatusCode> {
+    let tok = get_token(&state.pool, &req.access_token)
+        .await
+        .map_err(db_err)?
+        .ok_or_else(ApiError::invalid_token)?;
+    if tok.expires_at <= now_millis() {
+        return Err(ApiError::invalid_token());
+    }
+    // selectedProfile 必须与令牌绑定的角色一致
+    if tok.player_id.as_deref() != Some(req.selected_profile.as_str()) {
+        return Err(ApiError::invalid_token());
+    }
+    let player = get_player_by_id(&state.pool, &req.selected_profile)
+        .await
+        .map_err(db_err)?
+        .ok_or_else(ApiError::invalid_token)?;
+
+    let ip = client_ip(&headers, addr).to_string();
+    let expires_at = now_millis() + JOIN_TTL_MS;
+    state.sessions.lock().unwrap().insert(
+        req.server_id.clone(),
+        JoinRecord {
+            player_id: player.id.clone(),
+            player_name: player.name.clone(),
+            ip: Some(ip),
+            expires_at,
+        },
+    );
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ---- hasJoined ----
+
+#[derive(Debug, Deserialize)]
+pub struct HasJoinedQuery {
+    pub username: String,
+    #[serde(rename = "serverId")]
+    pub server_id: String,
+    pub ip: Option<String>,
+}
+
+/// GET /sessionserver/session/minecraft/hasJoined
+pub async fn has_joined(
+    State(state): State<AppState>,
+    Query(query): Query<HasJoinedQuery>,
+) -> ApiResult<Result<Json<ProfileResponse>, StatusCode>> {
+    let now = now_millis();
+    let record: Option<JoinRecord> = {
+        let mut map = state.sessions.lock().unwrap();
+        let rec = map.get(&query.server_id).cloned();
+        // 一次性使用:无论成功失败都移除,防止重放
+        map.remove(&query.server_id);
+        rec
+    };
+    let Some(record) = record else {
+        return Ok(Err(StatusCode::NO_CONTENT));
+    };
+    if record.expires_at <= now {
+        return Ok(Err(StatusCode::NO_CONTENT));
+    }
+    // username 必须与记录角色名一致
+    if record.player_name != query.username {
+        return Ok(Err(StatusCode::NO_CONTENT));
+    }
+    // IP 校验(可选)
+    if state.config.check_ip {
+        if let Some(expected) = &record.ip {
+            if let Some(actual) = &query.ip {
+                if actual != expected {
+                    return Ok(Err(StatusCode::NO_CONTENT));
+                }
+            }
+        }
+    }
+
+    let player = get_player_by_id(&state.pool, &record.player_id)
+        .await
+        .map_err(db_err)?
+        .ok_or_else(ApiError::invalid_token)?;
+    let profile = build_profile_response(&state, &player, true)?;
+    Ok(Ok(Json(profile)))
+}
+
+// ---- profile 查询 ----
+
+#[derive(Debug, Deserialize)]
+pub struct ProfileQuery {
+    pub unsigned: Option<String>,
+}
+
+/// GET /sessionserver/session/minecraft/profile/{uuid}
+pub async fn profile(
+    State(state): State<AppState>,
+    Path(uuid): Path<String>,
+    Query(query): Query<ProfileQuery>,
+) -> ApiResult<Result<Json<ProfileResponse>, StatusCode>> {
+    let Some(player) = get_player_by_id(&state.pool, &uuid).await.map_err(db_err)? else {
+        return Ok(Err(StatusCode::NO_CONTENT));
+    };
+    // unsigned=false 时包含签名;默认 true(不含签名)
+    let signed = query.unsigned.as_deref() == Some("false");
+    let profile = build_profile_response(&state, &player, signed)?;
+    Ok(Ok(Json(profile)))
+}

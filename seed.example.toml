@@ -1,0 +1,24 @@
+# yggr 种子用户配置示例 — 复制为 seed.toml 后修改密码
+# 注意:密码以明文写在配置中,请使用强密码并妥善保管
+
+[[users]]
+username = "admin@example.com"         # 邮箱或用户名(登录时填写)
+password = "CHANGE_ME_STRONG_PASSWORD"
+preferred_language = "zh_CN"
+
+[[users.players]]
+name = "Steve" # 游戏内角色名
+# uuid = "069a79f4-44e9-4726-a5be-fca90e38aaf5"  # 可选:指定角色 UUID(兼容 Mojang 官方账号迁移)
+skin_model = "classic" # classic | slim
+# skin = "skins/steve.png"       # 可选:初始皮肤文件
+# cape = "capes/steve.png"       # 可选:初始披风文件
+
+# 可以继续添加更多用户
+# [[users]]
+# username = "player2@example.com"
+# password = "ANOTHER_STRONG_PASSWORD"
+# preferred_language = "en_US"
+#
+#   [[users.players]]
+#   name = "Alex"
+#   skin_model = "slim"

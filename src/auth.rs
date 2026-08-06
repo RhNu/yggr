@@ -1,0 +1,376 @@
+//! /authserver/* 认证 API:
+//! - POST /authserver/authenticate 登录
+//! - POST /authserver/refresh 刷新令牌
+//! - POST /authserver/validate 验证令牌
+//! - POST /authserver/invalidate 吊销令牌
+//! - POST /authserver/signout 登出
+
+use axum::extract::{ConnectInfo, Json, State};
+use axum::http::{header, HeaderMap, StatusCode};
+use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
+use std::net::{IpAddr, SocketAddr};
+
+use crate::crypto::{now_millis, random_token, random_uuid, verify_password};
+use crate::db::{
+    create_token, delete_token, delete_tokens_by_user, get_player_by_id, get_players_by_user,
+    get_token, get_user_by_id, get_user_by_username, Token,
+};
+use crate::error::{ApiError, ApiResult};
+use crate::state::AppState;
+use crate::types::{ProfileResponse, UserResponse};
+
+fn db_err(e: anyhow::Error) -> ApiError {
+    ApiError::internal(e.to_string())
+}
+
+/// 令牌是否在有效期内
+fn token_valid(tok: &Token) -> bool {
+    tok.expires_at > now_millis()
+}
+
+/// 从请求提取客户端 IP(优先 X-Forwarded-For,用于反代场景)
+pub fn client_ip(headers: &HeaderMap, addr: SocketAddr) -> IpAddr {
+    if let Some(xff) = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+    {
+        if let Some(first) = xff.split(',').next() {
+            if let Ok(ip) = first.trim().parse() {
+                return ip;
+            }
+        }
+    }
+    addr.ip()
+}
+
+// ---- 请求/响应结构 ----
+
+#[derive(Debug, Deserialize)]
+pub struct Agent {
+    #[allow(dead_code)]
+    name: Option<String>,
+    #[allow(dead_code)]
+    version: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthenticateRequest {
+    pub username: String,
+    pub password: String,
+    pub client_token: Option<String>,
+    pub request_user: Option<bool>,
+    #[allow(dead_code)]
+    pub agent: Option<Agent>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthenticateResponse {
+    pub access_token: String,
+    pub client_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub available_profiles: Option<Vec<ProfileResponse>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_profile: Option<ProfileResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<UserResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshRequest {
+    pub access_token: String,
+    pub client_token: Option<String>,
+    pub request_user: Option<bool>,
+    pub selected_profile: Option<ProfileSelection>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileSelection {
+    pub id: String,
+    #[allow(dead_code)]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshResponse {
+    pub access_token: String,
+    pub client_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_profile: Option<ProfileResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<UserResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidateRequest {
+    pub access_token: String,
+    pub client_token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvalidateRequest {
+    pub access_token: String,
+    pub client_token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SignoutRequest {
+    pub username: String,
+    pub password: String,
+}
+
+// ---- Handlers ----
+
+/// POST /authserver/authenticate
+pub async fn authenticate(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(req): Json<AuthenticateRequest>,
+) -> ApiResult<Json<AuthenticateResponse>> {
+    let ip = client_ip(&headers, addr);
+    if !state.limiter.check(ip) {
+        // 规范:短时间内多次登录失败按密码错误处理
+        return Err(ApiError::invalid_credentials());
+    }
+
+    let pool: &SqlitePool = &state.pool;
+
+    // 用户查找:先按用户名(邮箱),non_email_login 时再按角色名
+    let mut login_player = None;
+    let user = if let Some(u) = get_user_by_username(pool, &req.username)
+        .await
+        .map_err(db_err)?
+    {
+        u
+    } else if state.config.non_email_login {
+        match crate::db::get_player_by_name(pool, &req.username)
+            .await
+            .map_err(db_err)?
+        {
+            Some(p) => {
+                login_player = Some(p.clone());
+                get_user_by_id(pool, &p.user_id)
+                    .await
+                    .map_err(db_err)?
+                    .ok_or_else(ApiError::invalid_credentials)?
+            }
+            None => return Err(ApiError::invalid_credentials()),
+        }
+    } else {
+        return Err(ApiError::invalid_credentials());
+    };
+
+    if !verify_password(&req.password, &user.password_hash) {
+        return Err(ApiError::invalid_credentials());
+    }
+
+    // 角色绑定规则:角色名登录绑定该角色;仅一个角色自动绑定;多角色由客户端选择
+    let players = get_players_by_user(pool, &user.id)
+        .await
+        .map_err(db_err)?;
+    let selected = if let Some(p) = &login_player {
+        Some(p.clone())
+    } else if players.len() == 1 {
+        Some(players[0].clone())
+    } else {
+        None
+    };
+
+    // 颁发令牌
+    let client_token = req.client_token.unwrap_or_else(random_uuid);
+    let access_token = random_token();
+    let now = now_millis();
+    let ttl = state.config.token_ttl_days * 24 * 3600 * 1000;
+    create_token(
+        pool,
+        &access_token,
+        &client_token,
+        &user.id,
+        selected.as_ref().map(|p| p.id.as_str()),
+        now,
+        now + ttl,
+    )
+    .await
+    .map_err(db_err)?;
+
+    let available_profiles = players.iter().map(ProfileResponse::basic).collect();
+    let user_response = if req.request_user.unwrap_or(false) {
+        Some(UserResponse::from_user(&user))
+    } else {
+        None
+    };
+
+    Ok(Json(AuthenticateResponse {
+        access_token,
+        client_token,
+        available_profiles: Some(available_profiles),
+        selected_profile: selected.as_ref().map(ProfileResponse::basic),
+        user: user_response,
+    }))
+}
+
+/// POST /authserver/refresh
+pub async fn refresh(
+    State(state): State<AppState>,
+    Json(req): Json<RefreshRequest>,
+) -> ApiResult<Json<RefreshResponse>> {
+    let pool = &state.pool;
+
+    let tok = get_token(pool, &req.access_token)
+        .await
+        .map_err(db_err)?
+        .ok_or_else(ApiError::invalid_token)?;
+    if !token_valid(&tok) {
+        return Err(ApiError::invalid_token());
+    }
+    if let Some(ct) = &req.client_token {
+        if &tok.client_token != ct {
+            return Err(ApiError::invalid_token());
+        }
+    }
+
+    // 角色选择
+    let players = get_players_by_user(pool, &tok.user_id)
+        .await
+        .map_err(db_err)?;
+    let mut new_player_id = tok.player_id.clone();
+    if let Some(sel) = &req.selected_profile {
+        if tok.player_id.is_some() {
+            return Err(ApiError::profile_already_assigned());
+        }
+        if !players.iter().any(|p| &p.id == &sel.id) {
+            return Err(ApiError::invalid_profile_selection());
+        }
+        new_player_id = Some(sel.id.clone());
+    }
+
+    // 吊销旧令牌,颁发新令牌(相同 clientToken)
+    delete_token(pool, &tok.access_token).await.map_err(db_err)?;
+    let access_token = random_token();
+    let now = now_millis();
+    let ttl = state.config.token_ttl_days * 24 * 3600 * 1000;
+    create_token(
+        pool,
+        &access_token,
+        &tok.client_token,
+        &tok.user_id,
+        new_player_id.as_deref(),
+        now,
+        now + ttl,
+    )
+    .await
+    .map_err(db_err)?;
+
+    // 响应
+    let selected_profile = match &new_player_id {
+        Some(pid) => get_player_by_id(pool, pid)
+            .await
+            .map_err(db_err)?
+            .map(|p| ProfileResponse::basic(&p)),
+        None => None,
+    };
+    let user_response = if req.request_user.unwrap_or(false) {
+        get_user_by_id(pool, &tok.user_id)
+            .await
+            .map_err(db_err)?
+            .map(|u| UserResponse::from_user(&u))
+    } else {
+        None
+    };
+
+    Ok(Json(RefreshResponse {
+        access_token,
+        client_token: tok.client_token,
+        selected_profile,
+        user: user_response,
+    }))
+}
+
+/// POST /authserver/validate;有效返回 204
+pub async fn validate(
+    State(state): State<AppState>,
+    Json(req): Json<ValidateRequest>,
+) -> ApiResult<StatusCode> {
+    let tok = get_token(&state.pool, &req.access_token)
+        .await
+        .map_err(db_err)?
+        .ok_or_else(ApiError::invalid_token)?;
+    if !token_valid(&tok) {
+        return Err(ApiError::invalid_token());
+    }
+    if let Some(ct) = &req.client_token {
+        if &tok.client_token != ct {
+            return Err(ApiError::invalid_token());
+        }
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// POST /authserver/invalidate;无论结果如何返回 204
+pub async fn invalidate(
+    State(state): State<AppState>,
+    Json(req): Json<InvalidateRequest>,
+) -> ApiResult<StatusCode> {
+    if let Some(tok) = get_token(&state.pool, &req.access_token)
+        .await
+        .map_err(db_err)?
+    {
+        delete_token(&state.pool, &tok.access_token)
+            .await
+            .map_err(db_err)?;
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// POST /authserver/signout;吊销用户所有令牌
+pub async fn signout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(req): Json<SignoutRequest>,
+) -> ApiResult<StatusCode> {
+    let ip = client_ip(&headers, addr);
+    if !state.limiter.check(ip) {
+        return Err(ApiError::invalid_credentials());
+    }
+    let user = get_user_by_username(&state.pool, &req.username)
+        .await
+        .map_err(db_err)?
+        .ok_or_else(ApiError::invalid_credentials)?;
+    if !verify_password(&req.password, &user.password_hash) {
+        return Err(ApiError::invalid_credentials());
+    }
+    delete_tokens_by_user(&state.pool, &user.id)
+        .await
+        .map_err(db_err)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ---- 辅助:Bearer 认证(材质上传、certificates) ----
+
+/// 从 Authorization: Bearer 头解析并校验令牌;无效返回 401
+pub async fn bearer_token(state: &AppState, headers: &HeaderMap) -> Result<Token, ApiError> {
+    let auth = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(ApiError::unauthorized)?;
+    let token = auth
+        .strip_prefix("Bearer ")
+        .ok_or_else(ApiError::unauthorized)?;
+    let tok = get_token(&state.pool, token)
+        .await
+        .map_err(db_err)?
+        .ok_or_else(ApiError::unauthorized)?;
+    if !token_valid(&tok) {
+        return Err(ApiError::unauthorized());
+    }
+    Ok(tok)
+}

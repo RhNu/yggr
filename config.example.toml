@@ -1,0 +1,41 @@
+# yggr 配置示例 — 复制为 config.toml 后修改
+
+# 服务器名称(显示在启动器的 meta.serverName)
+server_name = "My Yggdrasil"
+
+# 外部访问基础 URL(用于生成材质 URL;HTTPS 由反向代理终结)
+# 例如 https://ygg.example.com 或 http://127.0.0.1:8080
+base_url = "http://127.0.0.1:8080"
+
+# 监听地址
+listen = "0.0.0.0:8080"
+
+# 数据目录(数据库、签名密钥、材质文件)
+data_dir = "data"
+
+# 角色 UUID 生成策略:offline(离线兼容)或 random(随机 v4)
+# seed.toml 中显式指定 uuid 的角色不受此影响
+player_uuid_generation = "offline"
+
+# 令牌有效期(天)
+token_ttl_days = 15
+
+# 允许使用角色名登录(推荐开启,自用方便)
+non_email_login = true
+
+# 额外的材质域名白名单规则(默认已包含 base_url 的域名)
+# 规则以 . 开头匹配子域,否则精确匹配
+skin_domains = []
+
+# hasJoined 时校验客户端 IP(开启后经代理需正确传递 X-Forwarded-For)
+check_ip = false
+
+# 登录/signout 每 IP 每分钟限流次数(0 表示不限)
+login_rate_limit_per_minute = 10
+
+# 种子配置文件(启动时创建用户与角色);None 表示禁用
+seed_file = "seed.toml"
+
+# 实现信息(显示在 meta)
+implementation_name = "yggr"
+implementation_version = "0.1.0"
