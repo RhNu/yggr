@@ -160,10 +160,11 @@ src/
 │   ├── state.rs         共享状态:AppState(池/密钥/会话缓存/限流器)、JoinRecord、RateLimiter
 │   ├── seed.rs          种子用户/角色/材质导入
 │   └── textures/        材质系统
-│       ├── mod.rs       聚合导出(store/process/payload)
+│       ├── mod.rs       聚合导出(store/process/payload/defaults)
 │       ├── store.rs     内容寻址存储 data/textures/{sha256}.png
 │       ├── process.rs   PNG 安全校验(sanitize/pad)
-│       └── payload.rs   textures 属性构造与签名
+│       ├── payload.rs   textures 属性构造与签名
+│       └── defaults.rs  内置默认皮肤(steve/alex),无皮肤时回退
 └── api/                 HTTP 处理器层(全部规范路径挂载于 /service 下)
     ├── mod.rs           build_app 路由组装 + 根路径 ALI + 聚合导出
     ├── auth.rs          /service/authserver/* 五个认证端点 + Bearer 令牌解析 + TokenStatus
@@ -265,6 +266,7 @@ data/
 | PUT    | `/service/api/user/profile/{uuid}/cape`                           | api/profiles     | Bearer | 上传披风                                           |
 | DELETE | `/service/api/user/profile/{uuid}/cape`                           | api/profiles     | Bearer | 清除披风                                           |
 | GET    | `/service/textures/{hash}`                                        | api/profiles     | 无     | 材质文件(`image/png`)                              |
+| GET    | `/service/textures/default/{model}`                              | api/profiles     | 无     | 内置默认皮肤(`classic`/`slim`)                      |
 | GET    | `/service/skins/MinecraftSkins/{username}`                        | api/profiles     | 无     | 旧式皮肤 API(`legacy_skin_api=true` 时生效)        |
 | POST   | `/service/minecraftservices/player/certificates`                  | api/certificates | Bearer | 1.19+ 消息签名密钥对                               |
 

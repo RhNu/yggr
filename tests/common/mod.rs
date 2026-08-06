@@ -12,7 +12,7 @@ use tower::ServiceExt;
 
 use yggr::api::build_app;
 use yggr::app::state::{AppState, RateLimiter};
-use yggr::app::textures::TextureStore;
+use yggr::app::textures::{DefaultSkins, TextureStore};
 use yggr::core::config::Config;
 use yggr::core::crypto;
 use yggr::core::db;
@@ -57,6 +57,7 @@ pub async fn setup() -> TestEnv {
     let pool = db::init_db(&dir.join("test.db")).await.unwrap();
     let (private_key, public_key) = crypto::generate_keypair_with_size(2048).unwrap();
     let store = TextureStore::new(&dir).unwrap();
+    let default_skins = DefaultSkins::init(&store).unwrap();
 
     // 创建用户与角色
     let user_id = crypto::random_uuid();
@@ -81,6 +82,7 @@ pub async fn setup() -> TestEnv {
         config,
         pool,
         store,
+        default_skins,
         private_key: Arc::new(private_key),
         public_key: public_key.clone(),
         sessions: Arc::new(Mutex::new(std::collections::HashMap::new())),

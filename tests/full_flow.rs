@@ -129,10 +129,18 @@ async fn full_yggdrasil_flow() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(profile["id"], env.player_id);
-    // 无材质时 properties 仅包含 uploadableTextures 属性
-    assert_eq!(
-        profile["properties"],
-        json!([{"name": "uploadableTextures", "value": "skin,cape"}])
+    // 无自定义材质时 properties 含 textures(默认皮肤)与 uploadableTextures
+    let props = profile["properties"].as_array().unwrap();
+    assert_eq!(props.len(), 2);
+    let textures_prop = props
+        .iter()
+        .find(|p| p["name"] == "textures")
+        .expect("textures property should exist");
+    assert!(!textures_prop["value"].as_str().unwrap().is_empty());
+    assert!(
+        props
+            .iter()
+            .any(|p| p["name"] == "uploadableTextures" && p["value"] == "skin,cape")
     );
 
     // 7. 批量查询

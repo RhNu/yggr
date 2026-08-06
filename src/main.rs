@@ -13,7 +13,7 @@ use tracing_subscriber::EnvFilter;
 use yggr::api::build_app;
 use yggr::app::seed;
 use yggr::app::state::{AppState, RateLimiter};
-use yggr::app::textures::TextureStore;
+use yggr::app::textures::{DefaultSkins, TextureStore};
 use yggr::core::config::Config;
 use yggr::core::crypto;
 use yggr::core::db;
@@ -52,6 +52,10 @@ async fn main() -> Result<()> {
     // 材质存储
     let store = TextureStore::new(&config.data_dir)?;
 
+    // 内置默认皮肤(导入到材质存储)
+    let default_skins = DefaultSkins::init(&store)?;
+    info!("default skins ready");
+
     // 种子用户初始化
     seed::apply_seed(&config, &pool, &store).await?;
 
@@ -67,6 +71,7 @@ async fn main() -> Result<()> {
         config: config.clone(),
         pool,
         store,
+        default_skins,
         private_key: Arc::new(private_key),
         public_key,
         sessions: Arc::new(Mutex::new(HashMap::new())),

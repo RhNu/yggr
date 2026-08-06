@@ -37,7 +37,7 @@
 | 2.2.1  | UUID 全局唯一、名称全局唯一但可变                                                 | `core/db`(players 表)                            | name UNIQUE                                                                            |
 | 2.2.2  | 随机 UUID v4 或离线兼容 `UUID.nameUUIDFromBytes("OfflinePlayer:"+name)`           | `core/crypto.rs::offline_uuid` / `random_uuid`   | 有交叉验证单测                                                                         |
 | 2.2.3  | 角色序列化 `{id, name, properties?}`                                              | `core/types.rs::ProfileResponse`                 |                                                                                        |
-| 2.2.4  | `textures` 属性 = Base64(JSON: timestamp/profileId/profileName/textures)          | `app/textures::build_textures_value`             | timestamp 为 Java 毫秒                                                                 |
+| 2.2.4  | `textures` 属性 = Base64(JSON: timestamp/profileId/profileName/textures)          | `app/textures::build_textures_value`             | timestamp 为 Java 毫秒;无皮肤时回退内置默认皮肤(steve/alex)                          |
 | 2.2.5  | `signature` = SHA1withRSA Base64                                                  | `core/crypto.rs::sign_sha1`                      | 仅 `unsigned=false` / hasJoined 时输出                                                 |
 | 2.2.6  | 材质 metadata.model 取 `default`/`slim`                                           | `app/textures`                                   | 仅 slim 输出 metadata;slim 存库为 `slim`,default 存 `classic`                          |
 | 2.2.7  | `uploadableTextures` 属性(逗号分隔,如 `skin`、`skin,cape`);不存在则该角色不可上传 | `api/session.rs::build_profile_response`         | 含 properties 的响应(hasJoined、profile 查询)中输出 `skin,cape`(yggr 两种材质均可上传) |

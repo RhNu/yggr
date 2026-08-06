@@ -32,20 +32,19 @@ pub fn build_profile_response(
     signed: bool,
 ) -> ApiResult<ProfileResponse> {
     let mut properties = Vec::new();
-    if player.skin_hash.is_some() || player.cape_hash.is_some() {
-        let value = build_textures_value(&state.config, player)
+    // 始终输出 textures 属性(无皮肤时回退到内置默认皮肤)
+    let value = build_textures_value(&state.config, &state.default_skins, player)
+        .map_err(|e| ApiError::internal(e.to_string()))?;
+    if signed {
+        let sig = sign_sha1(&state.private_key, value.as_bytes())
             .map_err(|e| ApiError::internal(e.to_string()))?;
-        if signed {
-            let sig = sign_sha1(&state.private_key, value.as_bytes())
-                .map_err(|e| ApiError::internal(e.to_string()))?;
-            properties.push(Property::signed(
-                "textures",
-                &value,
-                base64::engine::general_purpose::STANDARD.encode(sig),
-            ));
-        } else {
-            properties.push(Property::plain("textures", &value));
-        }
+        properties.push(Property::signed(
+            "textures",
+            &value,
+            base64::engine::general_purpose::STANDARD.encode(sig),
+        ));
+    } else {
+        properties.push(Property::plain("textures", &value));
     }
     // uploadableTextures(authlib-injector 扩展属性):该角色可上传的材质类型;
     // yggr 支持皮肤与披风上传,故输出 "skin,cape"

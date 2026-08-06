@@ -55,7 +55,7 @@ export default function UploadCapeDialog({
 
   const currentSkinUrl = player.skin_hash
     ? textureUrl(player.skin_hash)
-    : null;
+    : `/service/textures/default/${player.skin_model}`;
   const currentCapeUrl = player.cape_hash
     ? textureUrl(player.cape_hash)
     : null;

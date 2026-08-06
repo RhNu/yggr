@@ -18,8 +18,8 @@ pub use certificates::certificates;
 pub use manage::{create_player_handler, delete_player_handler, me, update_skin_model_handler};
 pub use meta::meta;
 pub use profiles::{
-    batch_profiles, delete_cape, delete_skin, legacy_skin, require_bearer, texture_file,
-    upload_cape, upload_skin,
+    batch_profiles, default_skin, delete_cape, delete_skin, legacy_skin, require_bearer,
+    texture_file, upload_cape, upload_skin,
 };
 pub use session::{has_joined, join, profile};
 
@@ -99,6 +99,11 @@ pub fn build_app(state: AppState) -> Router {
         )
         // 材质文件
         .route("/service/textures/{hash}", get(profiles::texture_file))
+        // 默认皮肤(classic|slim)
+        .route(
+            "/service/textures/default/{model}",
+            get(profiles::default_skin),
+        )
         // 旧式皮肤 API(legacy_skin_api=true 时生效)
         .route(
             "/service/skins/MinecraftSkins/{username}",

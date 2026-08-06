@@ -5,10 +5,12 @@
 //! - 校验尺寸:皮肤为 64x32/64x64 整数倍;披风为 64x32/22x17 整数倍(22x17 需补足)
 //! - 重新编码 PNG 以去除与位图无关的数据(防隐藏恶意代码)
 
+mod defaults;
 mod payload;
 mod process;
 mod store;
 
+pub use defaults::DefaultSkins;
 pub use payload::{build_textures_value, sign_textures_value};
 pub use process::{pad_cape, sanitize_png};
 pub use store::{TextureStore, import_texture_file};

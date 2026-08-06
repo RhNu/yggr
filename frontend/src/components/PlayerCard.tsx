@@ -41,7 +41,9 @@ export default function PlayerCard({ player, onChanged }: Props) {
     }
   };
 
-  const skinUrl = player.skin_hash ? textureUrl(player.skin_hash) : null;
+  const skinUrl = player.skin_hash
+    ? textureUrl(player.skin_hash)
+    : `/service/textures/default/${player.skin_model}`;
   const capeUrl = player.cape_hash ? textureUrl(player.cape_hash) : null;
 
   return (

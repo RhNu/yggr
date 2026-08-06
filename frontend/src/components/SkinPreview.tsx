@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import type { SkinViewer } from "skinview3d";
-import EmptyState from "./ui/EmptyState";
 
 interface Props {
   skinUrl: string | null;
@@ -59,11 +58,7 @@ export default function SkinPreview({ skinUrl, capeUrl, skinModel }: Props) {
   }, [skinUrl, capeUrl, skinModel]);
 
   if (!skinUrl) {
-    return (
-      <div className="skin-preview-container" style={{ minHeight: 300 }}>
-        <EmptyState text="No skin" />
-      </div>
-    );
+    return null;
   }
 
   return (

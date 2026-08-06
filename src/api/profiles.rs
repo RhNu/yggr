@@ -242,6 +242,25 @@ pub async fn texture_file(
     Ok(([(axum::http::header::CONTENT_TYPE, "image/png")], data).into_response())
 }
 
+/// GET /service/textures/default/{model} - 默认皮肤文件服务(classic|slim)
+pub async fn default_skin(
+    State(state): State<AppState>,
+    Path(model): Path<String>,
+) -> ApiResult<impl IntoResponse> {
+    let hash = match model.as_str() {
+        "slim" => state.default_skins.slim_hash(),
+        _ => state.default_skins.classic_hash(),
+    };
+    let Some(data) = state
+        .store
+        .load(hash)
+        .map_err(|e| ApiError::internal(e.to_string()))?
+    else {
+        return Ok(StatusCode::NOT_FOUND.into_response());
+    };
+    Ok(([(axum::http::header::CONTENT_TYPE, "image/png")], data).into_response())
+}
+
 /// GET /service/skins/MinecraftSkins/{username} - 旧式皮肤 API(legacy_skin_api=true 时由服务端处理)
 pub async fn legacy_skin(
     State(state): State<AppState>,
@@ -260,9 +279,10 @@ pub async fn legacy_skin(
             .map_err(db_err)?
             .ok_or_else(|| ApiError::not_found("Unknown profile"))?,
     };
-    let Some(skin_hash) = &player.skin_hash else {
-        return Ok(StatusCode::NOT_FOUND.into_response());
-    };
+    let skin_hash = player
+        .skin_hash
+        .as_deref()
+        .unwrap_or_else(|| state.default_skins.hash_for(&player.skin_model));
     let Some(data) = state
         .store
         .load(skin_hash)

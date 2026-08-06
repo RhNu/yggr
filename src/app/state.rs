@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use time::OffsetDateTime;
 
-use crate::app::textures::TextureStore;
+use crate::app::textures::{DefaultSkins, TextureStore};
 use crate::core::config::Config;
 
 /// hasJoined 会话记录(join 后短暂有效)
@@ -64,6 +64,7 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub pool: SqlitePool,
     pub store: TextureStore,
+    pub default_skins: DefaultSkins,
     pub private_key: Arc<RsaPrivateKey>,
     pub public_key: RsaPublicKey,
     /// serverId -> join 记录(内存,30 秒过期)

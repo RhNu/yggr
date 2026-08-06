@@ -59,7 +59,7 @@ export default function UploadSkinDialog({
 
   const currentSkinUrl = player.skin_hash
     ? textureUrl(player.skin_hash)
-    : null;
+    : `/service/textures/default/${player.skin_model}`;
 
   return (
     <Dialog
