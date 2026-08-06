@@ -1,4 +1,4 @@
-//! yggr — 自用 Yggdrasil 认证服务端(兼容 authlib-injector 规范)
+//! yggr — Yggdrasil 认证服务端 (兼容 authlib-injector 规范)
 //!
 //! 模块分层(依赖单向 api → app → core):
 //! - [core](core):基础设施(配置、密码学、错误、公共类型、数据层)

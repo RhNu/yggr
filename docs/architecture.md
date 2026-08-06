@@ -22,7 +22,7 @@ yggr 是一个用 Rust 编写的轻量级 Yggdrasil 认证服务端,目标为自
 | 材质系统  | 皮肤/披风上传与清除,PNG 安全校验(防 PNG bomb、去元数据重编码、22x17 披风补足),SHA-256 内容寻址存储 |
 | 元数据    | `GET /service` 返回 meta + skinDomains + signaturePublickey,含 ALI 头;根路径 `/` 返回 ALI 头       |
 | 消息签名  | `POST /service/minecraftservices/player/certificates`(Minecraft 1.19+,V1/V2 签名)                  |
-| 角色 UUID | 离线兼容 `MD5("OfflinePlayer:"+name)` 或随机 v4                               |
+| 角色 UUID | 离线兼容 `MD5("OfflinePlayer:"+name)` 或随机 v4                                                    |
 | 安全      | 登录限流、argon2id 密码哈希、RSA-4096 自动生成密钥、可选暂时失效令牌                               |
 
 ---
@@ -272,7 +272,7 @@ config/
 | PUT    | `/service/api/user/profile/{uuid}/cape`                           | api/profiles     | Bearer | 上传披风                                           |
 | DELETE | `/service/api/user/profile/{uuid}/cape`                           | api/profiles     | Bearer | 清除披风                                           |
 | GET    | `/service/textures/{hash}`                                        | api/profiles     | 无     | 材质文件(`image/png`)                              |
-| GET    | `/service/textures/default/{model}`                              | api/profiles     | 无     | 内置默认皮肤(`classic`/`slim`)                      |
+| GET    | `/service/textures/default/{model}`                               | api/profiles     | 无     | 内置默认皮肤(`classic`/`slim`)                     |
 | GET    | `/service/skins/MinecraftSkins/{username}`                        | api/profiles     | 无     | 旧式皮肤 API(`legacy_skin_api=true` 时生效)        |
 | POST   | `/service/minecraftservices/player/certificates`                  | api/certificates | Bearer | 1.19+ 消息签名密钥对                               |
 
@@ -567,60 +567,41 @@ sequenceDiagram
 
 配置文件采用分区结构(TOML sections),见 `config/config.example.toml`:
 
-| 配置项                              | 默认                    | 说明                               |
-| ----------------------------------- | ----------------------- | ---------------------------------- |
-| `[server]`                          |                         | 服务器基本配置                      |
-| `name`                              | `My Yggdrasil`          | meta.serverName                    |
-| `base_url`                          | `http://127.0.0.1:8080` | 材质 URL 基准 + skinDomains 推导   |
-| `listen`                            | `0.0.0.0:8080`          | 监听地址                           |
-| `skin_domains`                      | `[]`                    | 追加白名单规则                     |
-| `[data]`                            |                         | 数据目录                           |
-| `dir`                               | `data`                  | 数据库/密钥/材质目录(YGGR_DATA_DIR 覆盖) |
-| `[auth]`                            |                         | 认证配置                           |
-| `player_uuid_generation`            | `offline`               | `offline`/`random`                 |
-| `token_ttl_days`                    | `15`                    | 令牌有效期                         |
-| `token_active_window_days`          | `15`                    | 令牌有效窗口;小于 ttl 启用暂时失效 |
-| `non_email_login`                   | `true`                  | 角色名登录 + meta feature          |
-| `login_rate_limit_per_minute`       | `10`                    | 每 IP 限流,0 禁用                  |
-| `check_ip`                          | `false`                 | hasJoined IP 校验                  |
-| `max_players_per_user`              | `5`                     | 每用户角色数量上限                  |
-| `[user]`                            |                         | 用户配置                           |
-| `file`                              | `user.toml`             | 用户配置,相对配置目录;`None` 禁用  |
-| `[meta]`                            |                         | 实现信息                           |
-| `implementation_name`               | `yggr`                  | meta.implementationName            |
-| `implementation_version`            | 包版本                  | meta.implementationVersion         |
-| `register_url`                      | `None`                  | 注册页面地址(meta.links.register)  |
-| `[features]`                        |                         | 高级功能选项                       |
-| `legacy_skin_api`                   | `false`                 | 旧式皮肤 API 服务端处理            |
-| `no_mojang_namespace`               | `false`                 | 禁用 @mojang 命名空间              |
-| `enable_mojang_anti_features`       | `false`                 | 开启 Minecraft anti-features       |
-| `username_check`                    | `false`                 | 启用用户名验证                     |
-| `[frontend]`                        |                         | 前端配置                           |
-| `dir`                               | `frontend/dist`         | 前端目录(YGGR_FRONTEND_DIR 覆盖)   |
+| 配置项                        | 默认                    | 说明                                     |
+| ----------------------------- | ----------------------- | ---------------------------------------- |
+| `[server]`                    |                         | 服务器基本配置                           |
+| `name`                        | `My Yggdrasil`          | meta.serverName                          |
+| `base_url`                    | `http://127.0.0.1:8080` | 材质 URL 基准 + skinDomains 推导         |
+| `listen`                      | `0.0.0.0:8080`          | 监听地址                                 |
+| `skin_domains`                | `[]`                    | 追加白名单规则                           |
+| `[data]`                      |                         | 数据目录                                 |
+| `dir`                         | `data`                  | 数据库/密钥/材质目录(YGGR_DATA_DIR 覆盖) |
+| `[auth]`                      |                         | 认证配置                                 |
+| `player_uuid_generation`      | `offline`               | `offline`/`random`                       |
+| `token_ttl_days`              | `15`                    | 令牌有效期                               |
+| `token_active_window_days`    | `15`                    | 令牌有效窗口;小于 ttl 启用暂时失效       |
+| `non_email_login`             | `true`                  | 角色名登录 + meta feature                |
+| `login_rate_limit_per_minute` | `10`                    | 每 IP 限流,0 禁用                        |
+| `check_ip`                    | `false`                 | hasJoined IP 校验                        |
+| `max_players_per_user`        | `5`                     | 每用户角色数量上限                       |
+| `[user]`                      |                         | 用户配置                                 |
+| `file`                        | `user.toml`             | 用户配置,相对配置目录;`None` 禁用        |
+| `[meta]`                      |                         | 实现信息                                 |
+| `implementation_name`         | `yggr`                  | meta.implementationName                  |
+| `implementation_version`      | 包版本                  | meta.implementationVersion               |
+| `register_url`                | `None`                  | 注册页面地址(meta.links.register)        |
+| `[features]`                  |                         | 高级功能选项                             |
+| `legacy_skin_api`             | `false`                 | 旧式皮肤 API 服务端处理                  |
+| `no_mojang_namespace`         | `false`                 | 禁用 @mojang 命名空间                    |
+| `enable_mojang_anti_features` | `false`                 | 开启 Minecraft anti-features             |
+| `username_check`              | `false`                 | 启用用户名验证                           |
+| `[frontend]`                  |                         | 前端配置                                 |
+| `dir`                         | `frontend/dist`         | 前端目录(YGGR_FRONTEND_DIR 覆盖)         |
 
 环境变量覆盖:
 
-| 环境变量           | 默认             | 说明                       |
-| ------------------ | ---------------- | -------------------------- |
-| `YGGR_CONFIG_DIR`  | `config`         | 配置目录                   |
-| `YGGR_DATA_DIR`    | `[data] dir`     | 数据目录                   |
-| `YGGR_FRONTEND_DIR`| `[frontend] dir` | 前端目录                   |
-
----
-
-## 9. 规范符合性总览
-
-| 规范章节                              | 状态                 |
-| ------------------------------------- | -------------------- |
-| 基本约定(编码/JSON/错误格式/数据格式) | 符合                 |
-| 模型:用户/角色/令牌                   | 符合(含暂时失效状态) |
-| 认证 API(5 端点)                      | 符合                 |
-| 会话 API(join/hasJoined/profile)      | 符合                 |
-| 角色 API(批量查询)                    | 符合                 |
-| 材质上传(含 PNG 安全)                 | 符合                 |
-| 元数据 + ALI                          | 符合                 |
-| 签名密钥对                            | 符合(RSA-4096)       |
-| certificates(profile key 扩展)        | 符合                 |
-| 可选 feature 选项                     | 符合(全部可配置)     |
-
-全部规范项已符合,逐条核对见 [`spec-compliance.md`](spec-compliance.md)。
+| 环境变量            | 默认             | 说明     |
+| ------------------- | ---------------- | -------- |
+| `YGGR_CONFIG_DIR`   | `config`         | 配置目录 |
+| `YGGR_DATA_DIR`     | `[data] dir`     | 数据目录 |
+| `YGGR_FRONTEND_DIR` | `[frontend] dir` | 前端目录 |
