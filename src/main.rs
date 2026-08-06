@@ -55,6 +55,13 @@ async fn main() -> Result<()> {
     // 种子用户初始化
     seed::apply_seed(&config, &pool, &store).await?;
 
+    // 启动时清理过期令牌
+    match db::delete_expired_tokens(&pool, crypto::now_millis()).await {
+        Ok(n) if n > 0 => info!("cleaned {} expired tokens", n),
+        Ok(_) => {}
+        Err(e) => warn!("failed to clean expired tokens: {e}"),
+    }
+
     // 应用状态
     let state = AppState {
         config: config.clone(),
@@ -66,7 +73,7 @@ async fn main() -> Result<()> {
         limiter: Arc::new(RateLimiter::new(config.login_rate_limit_per_minute)),
     };
 
-    // 定期清理过期的 join 会话
+    // 定期清理过期的 join 会话与令牌
     {
         let state = state.clone();
         tokio::spawn(async move {
@@ -74,6 +81,11 @@ async fn main() -> Result<()> {
             loop {
                 interval.tick().await;
                 state.cleanup_sessions();
+                if let Err(e) =
+                    db::delete_expired_tokens(&state.pool, crypto::now_millis()).await
+                {
+                    warn!("failed to clean expired tokens: {e}");
+                }
             }
         });
     }

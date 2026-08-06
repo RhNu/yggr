@@ -2,13 +2,14 @@
 //! 并设置 ALI 头 X-Authlib-Injector-API-Location
 
 use axum::extract::State;
+use axum::http::HeaderName;
 use axum::response::IntoResponse;
-use axum::Json;
 use serde::Serialize;
 
 use crate::crypto::public_key_pem;
 use crate::error::ApiResult;
 use crate::state::AppState;
+use crate::types::JsonResponse;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,10 +58,7 @@ pub async fn meta(State(state): State<AppState>) -> ApiResult<impl IntoResponse>
     };
 
     Ok((
-        [(
-            axum::http::HeaderName::from_static("x-authlib-injector-api-location"),
-            "/",
-        )],
-        Json(response),
+        [(HeaderName::from_static("x-authlib-injector-api-location"), "/")],
+        JsonResponse(response),
     ))
 }

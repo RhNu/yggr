@@ -16,7 +16,7 @@ use crate::db::{get_player_by_id, get_token, Player};
 use crate::error::{ApiError, ApiResult};
 use crate::state::{AppState, JoinRecord};
 use crate::textures::build_textures_value;
-use crate::types::{ProfileResponse, Property};
+use crate::types::{JsonResponse, ProfileResponse, Property};
 
 /// join 会话有效期(毫秒)
 const JOIN_TTL_MS: i64 = 30_000;
@@ -25,8 +25,12 @@ fn db_err(e: anyhow::Error) -> ApiError {
     ApiError::internal(e.to_string())
 }
 
-/// 构建角色完整响应(含签名 textures 属性)
-pub fn build_profile_response(state: &AppState, player: &Player, signed: bool) -> ApiResult<ProfileResponse> {
+/// 构建角色完整响应(含签名 textures 属性与 uploadableTextures)
+pub fn build_profile_response(
+    state: &AppState,
+    player: &Player,
+    signed: bool,
+) -> ApiResult<ProfileResponse> {
     let mut properties = Vec::new();
     if player.skin_hash.is_some() || player.cape_hash.is_some() {
         let value = build_textures_value(&state.config, player)
@@ -43,6 +47,9 @@ pub fn build_profile_response(state: &AppState, player: &Player, signed: bool) -
             properties.push(Property::plain("textures", &value));
         }
     }
+    // uploadableTextures(authlib-injector 扩展属性):该角色可上传的材质类型;
+    // yggr 支持皮肤与披风上传,故输出 "skin,cape"
+    properties.push(Property::plain("uploadableTextures", "skin,cape"));
     Ok(ProfileResponse::full(player, properties))
 }
 
@@ -107,7 +114,7 @@ pub struct HasJoinedQuery {
 pub async fn has_joined(
     State(state): State<AppState>,
     Query(query): Query<HasJoinedQuery>,
-) -> ApiResult<Result<Json<ProfileResponse>, StatusCode>> {
+) -> ApiResult<Result<JsonResponse<ProfileResponse>, StatusCode>> {
     let now = now_millis();
     let record: Option<JoinRecord> = {
         let mut map = state.sessions.lock().unwrap();
@@ -142,7 +149,7 @@ pub async fn has_joined(
         .map_err(db_err)?
         .ok_or_else(ApiError::invalid_token)?;
     let profile = build_profile_response(&state, &player, true)?;
-    Ok(Ok(Json(profile)))
+    Ok(Ok(JsonResponse(profile)))
 }
 
 // ---- profile 查询 ----
@@ -157,12 +164,12 @@ pub async fn profile(
     State(state): State<AppState>,
     Path(uuid): Path<String>,
     Query(query): Query<ProfileQuery>,
-) -> ApiResult<Result<Json<ProfileResponse>, StatusCode>> {
+) -> ApiResult<Result<JsonResponse<ProfileResponse>, StatusCode>> {
     let Some(player) = get_player_by_id(&state.pool, &uuid).await.map_err(db_err)? else {
         return Ok(Err(StatusCode::NO_CONTENT));
     };
     // unsigned=false 时包含签名;默认 true(不含签名)
     let signed = query.unsigned.as_deref() == Some("false");
     let profile = build_profile_response(&state, &player, signed)?;
-    Ok(Ok(Json(profile)))
+    Ok(Ok(JsonResponse(profile)))
 }

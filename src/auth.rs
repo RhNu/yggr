@@ -13,12 +13,15 @@ use std::net::{IpAddr, SocketAddr};
 
 use crate::crypto::{now_millis, random_token, random_uuid, verify_password};
 use crate::db::{
-    create_token, delete_token, delete_tokens_by_user, get_player_by_id, get_players_by_user,
-    get_token, get_user_by_id, get_user_by_username, Token,
+    create_token, delete_token, delete_tokens_by_user, enforce_token_limit, get_player_by_id,
+    get_players_by_user, get_token, get_user_by_id, get_user_by_username, Token,
 };
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
-use crate::types::{ProfileResponse, UserResponse};
+use crate::types::{JsonResponse, ProfileResponse, UserResponse};
+
+/// 每个用户同时有效的令牌数上限(规范建议,如 10);超限吊销最旧的
+const MAX_TOKENS_PER_USER: usize = 10;
 
 fn db_err(e: anyhow::Error) -> ApiError {
     ApiError::internal(e.to_string())
@@ -134,9 +137,10 @@ pub async fn authenticate(
     headers: HeaderMap,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(req): Json<AuthenticateRequest>,
-) -> ApiResult<Json<AuthenticateResponse>> {
+) -> ApiResult<JsonResponse<AuthenticateResponse>> {
+    // 限流:按客户端 IP(防全网爆破)+ 按用户名(规范建议针对用户,防单人爆破)
     let ip = client_ip(&headers, addr);
-    if !state.limiter.check(ip) {
+    if !state.limiter.check(&ip.to_string()) || !state.limiter.check(&req.username) {
         // 规范:短时间内多次登录失败按密码错误处理
         return Err(ApiError::invalid_credentials());
     }
@@ -200,6 +204,10 @@ pub async fn authenticate(
     )
     .await
     .map_err(db_err)?;
+    // 令牌数量上限:超限吊销该用户最旧的令牌
+    enforce_token_limit(pool, &user.id, MAX_TOKENS_PER_USER)
+        .await
+        .map_err(db_err)?;
 
     let available_profiles = players.iter().map(ProfileResponse::basic).collect();
     let user_response = if req.request_user.unwrap_or(false) {
@@ -208,7 +216,7 @@ pub async fn authenticate(
         None
     };
 
-    Ok(Json(AuthenticateResponse {
+    Ok(JsonResponse(AuthenticateResponse {
         access_token,
         client_token,
         available_profiles: Some(available_profiles),
@@ -221,7 +229,7 @@ pub async fn authenticate(
 pub async fn refresh(
     State(state): State<AppState>,
     Json(req): Json<RefreshRequest>,
-) -> ApiResult<Json<RefreshResponse>> {
+) -> ApiResult<JsonResponse<RefreshResponse>> {
     let pool = &state.pool;
 
     let tok = get_token(pool, &req.access_token)
@@ -252,8 +260,7 @@ pub async fn refresh(
         new_player_id = Some(sel.id.clone());
     }
 
-    // 吊销旧令牌,颁发新令牌(相同 clientToken)
-    delete_token(pool, &tok.access_token).await.map_err(db_err)?;
+    // 颁发新令牌(相同 clientToken);先建后删,保证失败时原令牌依然有效
     let access_token = random_token();
     let now = now_millis();
     let ttl = state.config.token_ttl_days * 24 * 3600 * 1000;
@@ -268,6 +275,12 @@ pub async fn refresh(
     )
     .await
     .map_err(db_err)?;
+    // 新令牌已成功创建,现在吊销原令牌
+    delete_token(pool, &tok.access_token).await.map_err(db_err)?;
+    // 令牌数量上限兜底(数量不变,防御性调用)
+    enforce_token_limit(pool, &tok.user_id, MAX_TOKENS_PER_USER)
+        .await
+        .map_err(db_err)?;
 
     // 响应
     let selected_profile = match &new_player_id {
@@ -286,7 +299,7 @@ pub async fn refresh(
         None
     };
 
-    Ok(Json(RefreshResponse {
+    Ok(JsonResponse(RefreshResponse {
         access_token,
         client_token: tok.client_token,
         selected_profile,
@@ -337,8 +350,9 @@ pub async fn signout(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(req): Json<SignoutRequest>,
 ) -> ApiResult<StatusCode> {
+    // 限流:IP + 用户名双维度(与 authenticate 同等强度)
     let ip = client_ip(&headers, addr);
-    if !state.limiter.check(ip) {
+    if !state.limiter.check(&ip.to_string()) || !state.limiter.check(&req.username) {
         return Err(ApiError::invalid_credentials());
     }
     let user = get_user_by_username(&state.pool, &req.username)

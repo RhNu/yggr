@@ -257,6 +257,39 @@ pub async fn delete_tokens_by_player(pool: &SqlitePool, player_id: &str) -> Resu
     Ok(())
 }
 
+/// 限制用户令牌数量:超限时按颁发时间吊销最旧的令牌(规范建议,如上限 10)
+pub async fn enforce_token_limit(pool: &SqlitePool, user_id: &str, max: usize) -> Result<()> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tokens WHERE user_id = ?")
+        .bind(user_id)
+        .fetch_one(pool)
+        .await?;
+    let excess = count - max as i64;
+    if excess <= 0 {
+        return Ok(());
+    }
+    sqlx::query(
+        "DELETE FROM tokens WHERE access_token IN (
+            SELECT access_token FROM tokens WHERE user_id = ?
+            ORDER BY issued_at ASC, access_token ASC
+            LIMIT ?
+        )",
+    )
+    .bind(user_id)
+    .bind(excess)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// 删除所有过期令牌,返回删除行数(启动时 + 定期清理调用)
+pub async fn delete_expired_tokens(pool: &SqlitePool, now: i64) -> Result<u64> {
+    Ok(sqlx::query("DELETE FROM tokens WHERE expires_at <= ?")
+        .bind(now)
+        .execute(pool)
+        .await?
+        .rows_affected())
+}
+
 /// 材质类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextureKind {

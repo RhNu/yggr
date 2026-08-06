@@ -3,7 +3,6 @@
 use rsa::{RsaPrivateKey, RsaPublicKey};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
-use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
 use time::OffsetDateTime;
 
@@ -19,11 +18,12 @@ pub struct JoinRecord {
     pub expires_at: i64,
 }
 
-/// 简单固定窗口限流(按 IP),用于登录/signout
+/// 简单固定窗口限流(按字符串 key),用于登录/signout;
+/// key 可为客户端 IP(防全网爆破)或用户名(规范建议针对用户限流)
 pub struct RateLimiter {
     limit: u32,
     window_secs: i64,
-    inner: Mutex<HashMap<IpAddr, (i64, u32)>>,
+    inner: Mutex<HashMap<String, (i64, u32)>>,
 }
 
 impl RateLimiter {
@@ -36,7 +36,7 @@ impl RateLimiter {
     }
 
     /// 检查并计数;返回 false 表示已超限
-    pub fn check(&self, ip: IpAddr) -> bool {
+    pub fn check(&self, key: &str) -> bool {
         if self.limit == 0 {
             return true;
         }
@@ -46,7 +46,7 @@ impl RateLimiter {
         if map.len() > 10_000 {
             map.retain(|_, (window, _)| *window > now - self.window_secs * 2);
         }
-        let entry = map.entry(ip).or_insert((now, 0));
+        let entry = map.entry(key.to_string()).or_insert((now, 0));
         if entry.0 != now {
             *entry = (now, 0);
         }

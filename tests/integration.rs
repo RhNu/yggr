@@ -270,8 +270,11 @@ async fn full_yggdrasil_flow() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(profile["id"], env.player_id);
-    // 无材质时 properties 为空数组
-    assert_eq!(profile["properties"], json!([]));
+    // 无材质时 properties 仅包含 uploadableTextures 属性
+    assert_eq!(
+        profile["properties"],
+        json!([{"name": "uploadableTextures", "value": "skin,cape"}])
+    );
 
     // 7. 批量查询
     let (status, res) = call(
@@ -467,6 +470,49 @@ async fn full_yggdrasil_flow() {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn token_limit_revokes_oldest() {
+    let env = setup().await;
+    let app = &env.app;
+
+    // 连续登录 11 次(上限 auth.rs::MAX_TOKENS_PER_USER = 10)
+    let mut tokens = Vec::new();
+    for _ in 0..11 {
+        let (status, res) = call(
+            app,
+            Method::POST,
+            "/authserver/authenticate",
+            Some(json!({"username": USERNAME, "password": TEST_PASSWORD})),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        tokens.push(res["accessToken"].as_str().unwrap().to_string());
+    }
+
+    // 最早颁发的令牌已被吊销(超限吊销最旧)
+    let (status, _) = call(
+        app,
+        Method::POST,
+        "/authserver/validate",
+        Some(json!({"accessToken": tokens[0]})),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // 最新令牌仍然有效
+    let (status, _) = call(
+        app,
+        Method::POST,
+        "/authserver/validate",
+        Some(json!({"accessToken": tokens[10]})),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
 }
 
 #[tokio::test]

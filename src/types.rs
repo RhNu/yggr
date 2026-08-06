@@ -1,8 +1,25 @@
 //! Yggdrasil API 公共序列化类型
 
+use axum::http::header;
+use axum::response::{IntoResponse, Response};
+use axum::Json;
 use serde::Serialize;
 
 use crate::db::{Player, User};
+
+/// JSON 响应包装:统一输出 `Content-Type: application/json; charset=utf-8`(规范要求)
+#[derive(Debug)]
+pub struct JsonResponse<T>(pub T);
+
+impl<T: Serialize> IntoResponse for JsonResponse<T> {
+    fn into_response(self) -> Response {
+        (
+            [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
+            Json(self.0),
+        )
+            .into_response()
+    }
+}
 
 /// 角色/用户属性(properties)
 #[derive(Debug, Clone, Serialize)]

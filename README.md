@@ -77,6 +77,11 @@ cp seed.example.toml seed.toml
 - `seed.toml` 含明文密码,请勿提交到版本库
 - 材质上传已做 PNG 安全处理(尺寸上限 1024、重新编码去元数据),防止恶意材质
 
+## 文档
+
+- [`docs/architecture.md`](docs/architecture.md) — 服务端架构文档(协议约定、数据模型、API 全景、安全设计)
+- [`docs/spec-compliance.md`](docs/spec-compliance.md) — authlib-injector 规范符合性核对表(含已知差距与改进建议)
+
 ## 测试
 
 ```bash

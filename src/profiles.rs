@@ -8,13 +8,11 @@ use axum::response::IntoResponse;
 use axum::Json;
 
 use crate::auth::bearer_token;
-use crate::db::{
-    get_player_by_id, get_players_by_names, update_player_texture, TextureKind,
-};
+use crate::db::{get_player_by_id, get_players_by_names, update_player_texture, TextureKind};
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 use crate::textures::{pad_cape, sanitize_png};
-use crate::types::ProfileResponse;
+use crate::types::{JsonResponse, ProfileResponse};
 
 /// 单次批量查询的最大角色数(防 CC 攻击)
 const MAX_PROFILES_PER_REQUEST: usize = 100;
@@ -35,9 +33,9 @@ fn internal(e: anyhow::Error) -> ApiError {
 pub async fn batch_profiles(
     State(state): State<AppState>,
     Json(names): Json<Vec<String>>,
-) -> ApiResult<Json<Vec<ProfileResponse>>> {
+) -> ApiResult<JsonResponse<Vec<ProfileResponse>>> {
     if names.is_empty() {
-        return Ok(Json(Vec::new()));
+        return Ok(JsonResponse(Vec::new()));
     }
     if names.len() > MAX_PROFILES_PER_REQUEST {
         return Err(ApiError::bad_request(format!(
@@ -48,7 +46,7 @@ pub async fn batch_profiles(
     let players = get_players_by_names(&state.pool, &names)
         .await
         .map_err(db_err)?;
-    Ok(Json(
+    Ok(JsonResponse(
         players.iter().map(ProfileResponse::basic).collect(),
     ))
 }

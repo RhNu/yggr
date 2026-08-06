@@ -22,6 +22,7 @@ use crate::auth::bearer_token;
 use crate::crypto::{millis_to_rfc3339, now_millis};
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
+use crate::types::JsonResponse;
 
 /// 密钥对有效期(天)
 const KEY_VALIDITY_DAYS: i64 = 7;
@@ -53,7 +54,7 @@ fn internal(e: impl std::fmt::Display) -> ApiError {
 pub async fn certificates(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> ApiResult<Json<CertificatesResponse>> {
+) -> ApiResult<JsonResponse<CertificatesResponse>> {
     let tok = bearer_token(&state, &headers).await?;
     // 要求令牌已绑定角色(客户端在进服前获取证书)
     if tok.player_id.is_none() {
@@ -87,7 +88,7 @@ pub async fn certificates(
     );
     let sig_v2 = sign_sha256(&state.private_key, v2_payload.as_bytes())?;
 
-    Ok(Json(CertificatesResponse {
+    Ok(JsonResponse(CertificatesResponse {
         key_pair: KeyPairResponse {
             private_key: private_b64,
             public_key: public_b64,

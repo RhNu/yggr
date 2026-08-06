@@ -20,10 +20,10 @@ use std::path::Path;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-/// 生成 RSA-2048 私钥(同时返回公钥)
+/// 生成 RSA-4096 私钥(同时返回公钥);规范推荐长度,仅影响新生成的主签名密钥
 pub fn generate_keypair() -> Result<(RsaPrivateKey, RsaPublicKey)> {
     let mut rng = OsRng;
-    let private = RsaPrivateKey::new(&mut rng, 2048).context("failed to generate RSA key")?;
+    let private = RsaPrivateKey::new(&mut rng, 4096).context("failed to generate RSA key")?;
     let public = RsaPublicKey::from(&private);
     Ok((private, public))
 }
