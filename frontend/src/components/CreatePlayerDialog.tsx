@@ -11,8 +11,7 @@ interface Props {
   onClose: () => void;
 }
 
-const UUID_RE =
-  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const UUID_SIMPLE_RE = /^[0-9a-fA-F]{32}$/;
 
 function isValidUuid(value: string): boolean {
@@ -53,20 +52,13 @@ export default function CreatePlayerDialog({ open, onClose }: Props) {
       onClose={onClose}
       footer={
         <>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onClose}
-            disabled={createPlayer.isPending}
-          >
+          <Button variant="secondary" size="sm" onClick={onClose} disabled={createPlayer.isPending}>
             Cancel
           </Button>
           <Button
             size="sm"
             onClick={handleSubmit}
-            disabled={
-              createPlayer.isPending || !name.trim() || Boolean(uuidError)
-            }
+            disabled={createPlayer.isPending || !name.trim() || Boolean(uuidError)}
           >
             {createPlayer.isPending ? "..." : "Add"}
           </Button>
@@ -82,11 +74,7 @@ export default function CreatePlayerDialog({ open, onClose }: Props) {
         maxLength={16}
         autoFocus
       />
-      <Select
-        label="Model"
-        value={model}
-        onChange={(e) => setModel(e.target.value)}
-      >
+      <Select label="Model" value={model} onChange={(e) => setModel(e.target.value)}>
         <option value="classic">Classic</option>
         <option value="slim">Slim</option>
       </Select>
@@ -99,9 +87,7 @@ export default function CreatePlayerDialog({ open, onClose }: Props) {
         maxLength={36}
       />
       {uuidError && <p className="text-sm text-red-400">{uuidError}</p>}
-      {createPlayer.error && (
-        <p className="text-sm text-red-400">{createPlayer.error.message}</p>
-      )}
+      {createPlayer.error && <p className="text-sm text-red-400">{createPlayer.error.message}</p>}
     </Dialog>
   );
 }
