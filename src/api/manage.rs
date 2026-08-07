@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::auth::bearer_token;
 use crate::app::state::AppState;
+use uuid::Uuid;
+
 use crate::core::config::UuidGeneration;
 use crate::core::crypto::{offline_uuid, random_uuid};
 use crate::core::db::{
@@ -87,6 +89,9 @@ pub struct CreatePlayerRequest {
     pub name: String,
     #[serde(default = "default_model")]
     pub skin_model: String,
+    /// 可选:指定角色 UUID(带或不带连字符均可),不填则按配置生成
+    #[serde(default)]
+    pub uuid: Option<String>,
 }
 
 fn default_model() -> String {
@@ -129,9 +134,26 @@ pub async fn create_player_handler(
         return Err(ApiError::bad_request("Player name already exists"));
     }
 
-    let player_id = match state.config.auth.player_uuid_generation {
-        UuidGeneration::Offline => offline_uuid(name),
-        UuidGeneration::Random => random_uuid(),
+    // 指定 UUID 时校验格式与唯一性,并规范化为无连字符格式
+    let player_id = match req.uuid {
+        Some(uuid) => {
+            let parsed = Uuid::parse_str(uuid.trim())
+                .map_err(|_| ApiError::bad_request("Invalid player UUID format"))?;
+            let normalized = parsed.simple().to_string();
+            if get_player_by_id(&state.pool, &normalized)
+                .await
+                .map_err(db_err)?
+                .is_some()
+            {
+                warn!(uuid = %normalized, "player UUID already exists");
+                return Err(ApiError::bad_request("Player UUID already exists"));
+            }
+            normalized
+        }
+        None => match state.config.auth.player_uuid_generation {
+            UuidGeneration::Offline => offline_uuid(name),
+            UuidGeneration::Random => random_uuid(),
+        },
     };
     create_player(
         &state.pool,

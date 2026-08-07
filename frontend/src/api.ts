@@ -77,10 +77,16 @@ export async function fetchMe(): Promise<MeResponse> {
   return request("/api/me");
 }
 
-export async function createPlayer(name: string, skinModel: string): Promise<Player> {
+export async function createPlayer(
+  name: string,
+  skinModel: string,
+  uuid?: string,
+): Promise<Player> {
   return request("/api/players", {
     method: "POST",
-    body: JSON.stringify({ name, skin_model: skinModel }),
+    body: JSON.stringify(
+      uuid ? { name, skin_model: skinModel, uuid } : { name, skin_model: skinModel },
+    ),
   });
 }
 

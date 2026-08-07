@@ -74,6 +74,69 @@ async fn manage_player_crud() {
 }
 
 #[tokio::test]
+async fn manage_player_uuid_validation() {
+    let env: TestEnv = setup().await;
+    let (token, _) = authenticate(&env.app).await;
+
+    // 指定合法 UUID(带连字符)→ 创建成功,id 规范化为无连字符格式
+    let uuid = "01234567-89ab-4def-8123-456789abcdef";
+    let (status, res) = call(
+        &env.app,
+        Method::POST,
+        "/api/players",
+        Some(json!({ "name": "Alex", "uuid": uuid })),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "create with uuid: {res}");
+    assert_eq!(res["id"], "0123456789ab4def8123456789abcdef");
+
+    // 指定无连字符的合法 UUID → 创建成功
+    let (status, _) = call(
+        &env.app,
+        Method::POST,
+        "/api/players",
+        Some(json!({ "name": "Bob", "uuid": "11223344556677889900aabbccddeeff" })),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    // 非法格式 → 400
+    let (status, _) = call(
+        &env.app,
+        Method::POST,
+        "/api/players",
+        Some(json!({ "name": "Carol", "uuid": "not-a-uuid" })),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // 重复 UUID → 400
+    let (status, _) = call(
+        &env.app,
+        Method::POST,
+        "/api/players",
+        Some(json!({ "name": "Dave", "uuid": uuid })),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // 与预置角色 Steve 的 UUID 冲突 → 400
+    let (status, _) = call(
+        &env.app,
+        Method::POST,
+        "/api/players",
+        Some(json!({ "name": "Eve", "uuid": env.player_id })),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn manage_player_name_validation() {
     let env: TestEnv = setup().await;
     let (token, _) = authenticate(&env.app).await;

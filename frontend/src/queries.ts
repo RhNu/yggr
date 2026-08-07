@@ -29,8 +29,8 @@ export function useLogin() {
 export function useCreatePlayer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, skinModel }: { name: string; skinModel: string }) =>
-      apiCreatePlayer(name, skinModel),
+    mutationFn: ({ name, skinModel, uuid }: { name: string; skinModel: string; uuid?: string }) =>
+      apiCreatePlayer(name, skinModel, uuid),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: meKey }),
   });
 }
