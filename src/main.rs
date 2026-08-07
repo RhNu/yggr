@@ -22,11 +22,10 @@ use yggr::core::db;
 #[cfg(unix)]
 async fn wait_shutdown_signal() {
     use tokio::signal::unix::{SignalKind, signal};
+    let mut sigterm = signal(SignalKind::terminate()).expect("install SIGTERM handler");
     tokio::select! {
         _ = tokio::signal::ctrl_c() => info!("received Ctrl+C, shutting down"),
-        _ = signal(SignalKind::terminate())
-            .expect("install SIGTERM handler")
-            .recv() => info!("received SIGTERM, shutting down"),
+        _ = sigterm.recv() => info!("received SIGTERM, shutting down"),
     }
 }
 
